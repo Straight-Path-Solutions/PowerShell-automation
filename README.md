@@ -1,13 +1,12 @@
 # SQL Server DBA PowerShell Scripts
 
-A collection of **PowerShell scripts** to assist SQL Server DBAs with automation, configuration, and day-to-day management tasks.  
-These scripts are designed to save time, reduce human error, and streamline SQL Server administration.
+A collection of **PowerShell scripts** to assist SQL Server DBAs with automation, configuration, and day-to-day management tasks. These scripts are designed to save time, reduce human error, and streamline SQL Server administration.
 
 ## 📂 Scripts Included
 
 
 ### 1. [Dbatools SQL Deployment](./Scripts/DBatools%20SQL%20Deployment/)
-Automates the installation and initial configuration of SQL Server, including setup of service accounts, features, and basic settings.  
+Automates the installation and initial configuration of SQL Server, including setup of service accounts, features, maintenance, community tools, and other important settings.  
 📁 [Script Folder](./Scripts/DBatools%20SQL%20Deployment/)  
 📝 [Blog Post](https://straightpathsql.com/archives/2025/09/deploy-sql-server-with-this-one-script-dbatools/)
 
