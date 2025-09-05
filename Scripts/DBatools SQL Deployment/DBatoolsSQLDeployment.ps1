@@ -92,18 +92,17 @@ Clear-Host
     $DeployOlaMaintenance       = 1 # 0 = False, 1 = True (set to 1 to update Ola Maintenance Solution)
         $OlaDatabase            = $ToolsAdminDatabase #the database where Ola Maintenance Solution store procedures will stored updated
                                 <# Note - Ola Jobs are set to automatically install, with a weekly full, daily diff, 15 minute log backups, backups go to the $BackupPath above, cleanup
-                                time of 336 hours (two weeks), logtotable enabled on the $OlaDatabase. If you want to change any of this you will need to go down to that portion 
-                                of the script and modify it. #>
+                                time of 336 hours (two weeks), logtotable enabled on the $OlaDatabase. If you want to change any of this you will need to go down to line 525 and modify the parts you want changed! #>
 
     $deployFirstResponder       = 1 #1 will deploy first responder toolkit to the new instance.
-        $FirstResponderDatabase = 'Master' # the database where First Responder Kit stored procedures will be installed or updated.
+        $FirstResponderDatabase = 'master' # the database where First Responder Kit stored procedures will be installed or updated.
         $RemoveSQLVersionsTable = 1 # 0 = False, 1 = True (set to 1 to drop the dbo.SQLServerVersions that is automatically created in master as part of the update.)
 
     $deployWhoisactive          = 1 #1 will deploy whoisactive to the new instance.
-        $whoIsActiveDatabase    = 'Master' #the database where WhoisActive stored procedures will be installed or updated.
+        $whoIsActiveDatabase    = 'master' #the database where WhoisActive stored procedures will be installed or updated.
 
     #StraightPathTools
-    $SPtoolsDeploymentDatabase  = 'Master'
+    $SPtoolsDeploymentDatabase  = 'master'
     $Deploy_SP_CheckBackup      = 1 # https://github.com/Straight-Path-Solutions/sp_CheckBackup
     $Deploy_SP_CheckSecurity    = 1 # https://github.com/Straight-Path-Solutions/sp_CheckSecurity
     $Deploy_SP_CheckTempDB      = 1 # https://github.com/Straight-Path-Solutions/sp_CheckTempdb
@@ -116,24 +115,67 @@ Clear-Host
 <# == Nothing more needs to be changed ================================================================================ #>
 <# ==================================================================================================================== #>
 <# ==================================================================================================================== #>
-Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
 
 #Region - Prompted Variables, Derived Variables, Tests, and Prep
     $sw1 = [system.diagnostics.stopwatch]::startNew()
+    Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
+
+    # Color splats for host messages
+        $goodsplat = @{
+            foregroundcolor = 'Green'
+        }
+        $badsplat = @{
+            foregroundcolor = 'DarkRed'
+            backgroundcolor = 'White'
+        }
+        $warningsplat = @{
+            foregroundcolor = 'DarkYellow'
+        }
+
+    # Initial Tests
+        IF(!(([System.Security.Principal.WindowsPrincipal]::new([System.Security.Principal.WindowsIdentity]::GetCurrent())).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)))
+                {Write-Host "ISSUE: This script must be executed in an Administrator Powershell window." @badsplat; RETURN}
+
+
+        IF ($ENV:COMPUTERNAME -ieq $ComputerName) {
+            Write-host "ISSUE: The target computer name cannot be the same as the computer running this script. Please change the `$ComputerName variable to a remote computer and try again." @badsplat
+            RETURN
+        }
+
+       
+
+    # Creating the connection SPLAT
+    IF ($instancename.length -gt 0 )    { 
+        $sqlsplat = @{
+            SqlInstance = "$ComputerName\$instancename"
+        }
+        $SqlInstance = "$ComputerName\$instancename"
+    } ELSE {
+        $sqlsplat = @{
+            SqlInstance = $ComputerName
+        }
+        $SqlInstance = $ComputerName
+    }   
+
+    #Adding credentials to the sql conneciton splat if the install sql variable is set to 1
     # Prompted
         IF ($InstallSQL -eq 1) { 
             $serviceAccount      = $Host.UI.PromptForCredential("Engine & Agent Service Account", "Please enter the domain credentials for the SQL Engine and SQL Agent.", "Lab\SQLService", "")
             $Cred                = $Host.UI.PromptForCredential("Domain Account with permissions to run this process", "Please enter the domain credentials this process to run successfully on the remote target and with access to the network share.", "LAB\DA", "")
-        }
 
-    # Derived    
+            $SQLSplat.sqlcredential = $Cred
+        } 
+
+
+
+
+    # Derived Variables
         $DerInstancePath         = $Datapath.replace('SQLData','SQLRoot').replace('\\','\DEFAULT\')
         $DerLogPath              = $Logpath.replace('\\','\DEFAULT\')
         $DerTempPath             = $Temppath.replace('\\','\DEFAULT\')
         $DerDatapath             = $Datapath.replace('\\','\DEFAULT\')
 
-        IF ($instancename.length -gt 0 ) { $SqlInstance = "$ComputerName\$instancename"} 
-        ELSE {$SqlInstance = $ComputerName }
+
 
         #collecting the path for the folder holding this script for referencing other resources in the folder.
             $ScriptPath = Switch ($Host.name){
@@ -144,7 +186,7 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
 
         $transcriptpath = "$ScriptPath\Transcripts\DeploymentLog_$(get-date -f MM-dd-yy)_$(get-date -f "HH.mm").log"
         Start-Transcript -path $transcriptpath 
-        Write-host "PROCESS: Process Start - $(get-date -f 'MM-dd-yyyy HH:mm') sec" -ForegroundColor Green
+        Write-host "PROCESS: Process Start - $(get-date -f 'MM-dd-yyyy HH:mm')" @goodsplat
 
         IF ($AutoCreateShare -eq 1) {
             # Creating a share that 'Everyone' can read so that the target computer can access the SQL Installer files during the SQL install portion, as well as the update directory during the Instance update.
@@ -152,26 +194,7 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
             $share = $("\\$($env:COMPUTERNAME)" + $s.Substring(2)) 
             }
 
-    # Tests
-        IF ($ENV:COMPUTERNAME -ieq $ComputerName) {
-            Write-host "ISSUE: The target computer name cannot be the same as the computer running this script. Please change the `$ComputerName variable to a remote computer and try again." -ForegroundColor DarkRed -BackgroundColor White
-            RETURN
-        }
 
-        IF ($instancename.IndexOf('\') -ne -1) {
-            Write-host "ISSUE: `$instancename variable has a '\' in it. Do not put 'HostName\InstanceName' as the value of that variable, only put Instancename" -ForegroundColor DarkRed -BackgroundColor White
-            RETURN
-        }
-
-        IF ($null -eq $s -AND $autocreateshare -eq 1 -AND $InstallSQL -eq 1) {
-            Write-Host "ISSUE: The share was not automatically created and SQL is set to install - no installation media is referencable and it will fail. Please resolve this before trying again." -ForegroundColor DarkRed -BackgroundColor White
-            RETURN
-        }
-
-        IF ($ManualPathtoInstall.Length -eq 0 -AND $autocreateshare -eq 0 -AND $InstallSQL -eq 1) {
-            Write-Host "ISSUE: The `$ManualPathtoInstall variable is empty and SQL is set to install, and auto create share is disabled. - no installation media is referencable and it will fail. Please resolve this before trying again." -ForegroundColor DarkRed -BackgroundColor White
-            RETURN
-        }
 
     #Prep
         IF ($AutoClearDirectories -eq 1) {
@@ -184,15 +207,32 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
             }
         }
 
+    #follow up tests
+     IF ($instancename.IndexOf('\') -ne -1) {
+            Write-host "ISSUE: `$instancename variable has a '\' in it. Do not put 'HostName\InstanceName' as the value of that variable, only put Instancename" @badsplat
+            RETURN
+        }
+
+        IF ($null -eq $s -AND $autocreateshare -eq 1 -AND $InstallSQL -eq 1) {
+            Write-Host "ISSUE: The share was not automatically created and SQL is set to install - no installation media is referencable and it will fail. Please resolve this before trying again." @badsplat
+            RETURN
+        }
+
+        IF ($ManualPathtoInstall.Length -eq 0 -AND $autocreateshare -eq 0 -AND $InstallSQL -eq 1) {
+            Write-Host "ISSUE: The `$ManualPathtoInstall variable is empty and SQL is set to install, and auto create share is disabled. - no installation media is referencable and it will fail. Please resolve this before trying again." @badsplat
+            RETURN
+        }
+
+
     $sw1.stop()
-    Write-host "PROCESS: Variables, Derived Variables, Prompted Variables, Tests, and Prep Steps complete. Elapsed Time: $($sw1.Elapsed.minutes)min $($sw1.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Variables, Derived Variables, Prompted Variables, Tests, and Prep Steps complete. Elapsed Time: $($sw1.Elapsed.minutes)min $($sw1.Elapsed.seconds)sec" @goodsplat
 #endregion
 
 #Region - Drive allocation (Test-DbaDiskAllocation)
     $sw2 = [system.diagnostics.stopwatch]::startNew()
 
         IF ($CheckdriveAllocation -eq 1) {
-        Write-host "PROCESS: Starting Drive Allocation Check - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+        Write-host "PROCESS: Starting Drive Allocation Check - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
 
             TRY  {
                 $d         = "$($Datapath.Substring(0,1)):\", "$($logpath.Substring(0,1)):\", "$($Temppath.Substring(0,1)):\"
@@ -202,30 +242,30 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
 
                 IF ($DrivesNeedAttn.count -gt 0) {
                     $DrivesNeedAttn | foreach-object {
-                        Write-host "FINDING: Drive [$($_.name)] on Host [$($_.Server)] is not currently allocated to 64KB, please reformat this drive with 64KB allocation before installing SQL Server." -ForegroundColor DarkRed -BackgroundColor White
+                        Write-host "FINDING: Drive [$($_.name)] on Host [$($_.Server)] is not currently allocated to 64KB, please reformat this drive with 64KB allocation before installing SQL Server." @badsplat
                     }
                     IF($AutoReformatDrives -eq 1) {
-                        Write-Host "PROCESS: Drive Auto Reformat is enabled. Reformatting the identified drives before continuing." -ForegroundColor Green
+                        Write-Host "PROCESS: Drive Auto Reformat is enabled. Reformatting the identified drives before continuing." @goodsplat
                             $DrivesNeedAttn | Foreach-object {
                             $target = $_.name.replace(":\",'')
                             Invoke-Command -ComputerName $ComputerName -ScriptBlock {
                                 Format-Volume -DriveLetter $using:target -FileSystem NTFS -Full -AllocationUnitSize 65536 -Force
                             }
                         }
-                    } ELSE { Write-host "PROCESS: Stopping - please resolve the Drive Allocation issue manually or disable the check before trying again." -ForegroundColor DarkRed -BackgroundColor White; RETURN }
-                } ELSE { Write-host "FINDING: No drive allocation issues found" -ForegroundColor Green }
-            } CATCH { Write-HOST "ISSUE: Check Allocation process had an error - Stopping the process for troubleshooting." -ForegroundColor DarkRed -BackgroundColor White; RETURN }
-        } ELSE {Write-host "PROCESS: Drive Allocation check has been disabled." -ForegroundColor DarkYellow } 
+                    } ELSE { Write-host "PROCESS: Stopping - please resolve the Drive Allocation issue manually or disable the check before trying again." @badsplat; RETURN }
+                } ELSE { Write-host "FINDING: No drive allocation issues found" @goodsplat }
+            } CATCH { Write-HOST "ISSUE: Check Allocation process had an error - Stopping the process for troubleshooting." @badsplat; RETURN }
+        } ELSE {Write-host "PROCESS: Drive Allocation check has been disabled." @warningsplat } 
 
     $sw2.stop()
-    Write-host "PROCESS: Drive Allocation complete. Elapsed Time: $($sw2.Elapsed.minutes)min $($sw2.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Drive Allocation complete. Elapsed Time: $($sw2.Elapsed.minutes)min $($sw2.Elapsed.seconds)sec" @goodsplat
 #endregion
 
 #Region - SQL Server Installation (Install-Dbainstance)
     $sw3 = [system.diagnostics.stopwatch]::startNew()
 
         IF ($InstallSQL = 1) {
-            Write-host "PROCESS: Starting SQL install - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+            Write-host "PROCESS: Starting SQL install - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
             Try {
                 # Modify the ISO path based on whether the user is using the auto created share or a custom location.
                 IF ($AutoCreateShare = 1) { $isopath = "$share\SQL Files\setup.exe"} 
@@ -271,22 +311,22 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
                 IF ($instresult.successful -eq $false) {
                     THROW $instresult.exitmessage
                 } ELSEIF ($instresult.restarted -eq $False) {
-                    Write-host "PROCESS: Install Complete - Restarting Computer." -ForegroundColor Green
+                    Write-host "PROCESS: Install Complete - Restarting Computer." @goodsplat
                     Restart-Computer -ComputerName $ComputerName -force -wait
                 }
 
-            } CATCH { Write-Host "ISSUE: SQL Install had an error - Stopping the process for troubleshooting." -ForegroundColor DarkRed -BackgroundColor White; RETURN}
-        } ELSE { Write-Host "PROCESS: SQL Install was disabled." -ForegroundColor DarkYellow }
+            } CATCH { Write-Host "ISSUE: SQL Install had an error - Stopping the process for troubleshooting." @badsplat; RETURN}
+        } ELSE { Write-Host "PROCESS: SQL Install was disabled." @warningsplat }
 
     $sw3.stop()
-    Write-host "PROCESS: SQL Install and restart complete. Elapsed Time: $($sw3.Elapsed.minutes)min $($sw3.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: SQL Install and restart complete. Elapsed Time: $($sw3.Elapsed.minutes)min $($sw3.Elapsed.seconds)sec" @goodsplat
 #endregion
 
 #Region - Update SQL Server
     $sw4 = [system.diagnostics.stopwatch]::startNew()
 
     IF ($UpdateSQL -eq 1) {
-        Write-host "PROCESS: Starting SQL update - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+        Write-host "PROCESS: Starting SQL update - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
         Try {
             IF ($AutoCreateShare = 1) { $updatepath = "$share\SQL Updates\"} 
             ELSE { $updatepath = $ManualPathtoUpdate }
@@ -305,106 +345,105 @@ Set-DbatoolsConfig -FullName sql.connection.trustcert -Value $true -register
             If ($result.successful -eq $false) {
                 THROW "Update failed"
             } ELSEIF ($result.restarted -eq $false) {
-                Write-host "PROCESS: Update Complete - Restarting Computer." -ForegroundColor Green
+                Write-host "PROCESS: Update Complete - Restarting Computer." @goodsplat
                 Restart-Computer -ComputerName $ComputerName -force -wait
             }
 
-        } CATCH { Write-Host "ISSUE: SQL Update had an error - Stopping the process for troubleshooting." -ForegroundColor DarkRed -BackgroundColor White; RETURN}
-    } ELSE { Write-Host "PROCESS: SQL Update was disabled." -ForegroundColor DarkYellow }
+        } CATCH { Write-Host "ISSUE: SQL Update had an error - Stopping the process for troubleshooting." @badsplat; RETURN}
+    } ELSE { Write-Host "PROCESS: SQL Update was disabled." @warningsplat }
 
     $sw4.stop()
-    Write-host "PROCESS: SQL Update complete. Elapsed Time: $($sw4.Elapsed.minutes)min $($sw4.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: SQL Update complete. Elapsed Time: $($sw4.Elapsed.minutes)min $($sw4.Elapsed.seconds)sec" @goodsplat
 #endregion
 
-Write-host "PROCESS: Pausing processing for 3 minutes post restart before attempting to connect for configurations and maintenance (Post SQL update upgrade mode)." -ForegroundColor Green
-Start-sleep -seconds 180
-
-
 #Region - Configurations
+    Write-host "PROCESS: Pausing processing for 3 minutes post restart before attempting to connect for configurations and maintenance (Post SQL update upgrade mode)." @goodsplat
+    Start-sleep -seconds 180
+
     $sw5 = [system.diagnostics.stopwatch]::startNew()
 
-    Write-host "PROCESS: Starting SQL Configurations - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Starting SQL Configurations - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
 
         IF($SetPowerPlan -eq 1) {
             TRY{ 
                 Set-DbaPowerPlan -ComputerName $ComputerName -Credential $cred -Confirm:$false | Out-Null
-                Write-Host "PROCESS: Power Plan has been set to High Performance." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Power Plan had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Power Plan was disabled." -ForegroundColor DarkYellow }
+                Write-Host "PROCESS: Power Plan has been set to High Performance." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Power Plan had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Power Plan was disabled." @warningsplat }
 
         IF($SetMaxDop -eq 1) {
             TRY {
-                Test-DbaMaxDop -SqlInstance $SqlInstance -SqlCredential $Cred | Set-DbaMaxDop | Out-Null
-                Write-Host "PROCESS: MaxDOP has been set to the recommended value." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting MaxDOP had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set MaxDOP was disabled." -ForegroundColor DarkYellow }
+                Test-DbaMaxDop @sqlsplat | Set-DbaMaxDop | Out-Null
+                Write-Host "PROCESS: MaxDOP has been set to the recommended value." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting MaxDOP had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set MaxDOP was disabled." @warningsplat }
 
         IF($SetOptimizeForAdHoc -eq 1) {
             TRY {
-                Get-DbaSpConfigure -SqlInstance $SqlInstance -SqlCredential $Cred | Where-Object { $_.displayname -eq 'Optimize For Ad Hoc Workloads'} | Set-DbaSpConfigure -Value 1 | Out-Null
-                Write-Host "PROCESS: Optimize for Ad Hoc Workloads has been enabled." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Optimize for Ad Hoc Workloads had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Optimize for Ad Hoc Workloads was disabled." -ForegroundColor DarkYellow }
+                Get-DbaSpConfigure @sqlsplat | Where-Object { $_.displayname -eq 'Optimize For Ad Hoc Workloads'} | Set-DbaSpConfigure -Value 1 | Out-Null
+                Write-Host "PROCESS: Optimize for Ad Hoc Workloads has been enabled." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Optimize for Ad Hoc Workloads had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Optimize for Ad Hoc Workloads was disabled." @warningsplat }
 
         IF($SetBackupCompression -eq 1) {
             TRY {
-                Get-DbaSpConfigure -SqlInstance $SqlInstance -SqlCredential $Cred | Where-Object { $_.displayname -eq 'Backup Compression Default'} | Set-DbaSpConfigure -Value 1 | Out-Null
-                Write-Host "PROCESS: Backup Compression has been enabled." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Backup Compression had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Backup Compression was disabled." -ForegroundColor DarkYellow }
+                Get-DbaSpConfigure @sqlsplat | Where-Object { $_.displayname -eq 'Backup Compression Default'} | Set-DbaSpConfigure -Value 1 | Out-Null
+                Write-Host "PROCESS: Backup Compression has been enabled." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Backup Compression had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Backup Compression was disabled." @warningsplat }
 
         IF($SetBackupChecksum -eq 1) {
             TRY {
-                Get-DbaSpConfigure -SqlInstance $SqlInstance -SqlCredential $Cred | Where-Object { $_.displayname -eq 'Backup Checksum Default'} | Set-DbaSpConfigure -Value 1 | Out-Null
-                Write-Host "PROCESS: Backup Checksum has been enabled." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Backup Checksum had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Backup Checksum was disabled." -ForegroundColor DarkYellow }
+                Get-DbaSpConfigure @sqlsplat | Where-Object { $_.displayname -eq 'Backup Checksum Default'} | Set-DbaSpConfigure -Value 1 | Out-Null
+                Write-Host "PROCESS: Backup Checksum has been enabled." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Backup Checksum had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Backup Checksum was disabled." @warningsplat }
 
         IF($SetCostThreshold -eq 1) {
             TRY {
-                Get-DbaSpConfigure -SqlInstance $SqlInstance -SqlCredential $Cred | Where-Object { $_.displayname -eq 'Cost Threshold For Parallelism'} | Set-DbaSpConfigure -Value 50 | Out-Null
-                Write-Host "PROCESS: Cost Threshold for Parallelism has been set to 50." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Cost Threshold for Parallelism had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Cost Threshold for Parallelism was disabled." -ForegroundColor DarkYellow }
+                Get-DbaSpConfigure @sqlsplat | Where-Object { $_.displayname -eq 'Cost Threshold For Parallelism'} | Set-DbaSpConfigure -Value 50 | Out-Null
+                Write-Host "PROCESS: Cost Threshold for Parallelism has been set to 50." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Cost Threshold for Parallelism had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Cost Threshold for Parallelism was disabled." @warningsplat }
 
         IF($SetRemoteAdmin -eq 1) {
             TRY {
-                Get-DbaSpConfigure -SqlInstance $SqlInstance -SqlCredential $Cred | Where-Object { $_.displayname -eq 'Remote Admin Connections'} | Set-DbaSpConfigure -Value 1 | Out-Null
-                Write-Host "PROCESS: Remote Admin Connections has been enabled." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Remote Admin Connections had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Remote Admin Connections was disabled." -ForegroundColor DarkYellow }
+                Get-DbaSpConfigure @sqlsplat | Where-Object { $_.displayname -eq 'Remote Admin Connections'} | Set-DbaSpConfigure -Value 1 | Out-Null
+                Write-Host "PROCESS: Remote Admin Connections has been enabled." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Remote Admin Connections had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Remote Admin Connections was disabled." @warningsplat }
 
         IF($SetMaxMemory -eq 1) {
             Try {
-                Set-DbaMaxMemory -SqlInstance $SqlInstance -SqlCredential $Cred | Out-Null
-                Write-Host "PROCESS: Max Memory has been set to the recommended value." -ForegroundColor Green
-            } Catch { Write-Host "ISSUE: Setting Max Memory had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Max Memory was disabled." -ForegroundColor DarkYellow }
+                Set-DbaMaxMemory @sqlsplat | Out-Null
+                Write-Host "PROCESS: Max Memory has been set to the recommended value." @goodsplat
+            } Catch { Write-Host "ISSUE: Setting Max Memory had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Max Memory was disabled." @warningsplat }
 
         IF($SetTempDBConfiguration -eq 1) {
             TRY {
-                Set-DbaTempDbConfig -SqlInstance $SqlInstance -SqlCredential $Cred -Datafilesize 1000 | Out-Null
-                Write-Host "PROCESS: TempDB configuration has been set to the recommended filecount with a default size." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting TempDB configuration had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set TempDB configuration was disabled." -ForegroundColor DarkYellow }
+                Set-DbaTempDbConfig @sqlsplat -Datafilesize 1000 | Out-Null
+                Write-Host "PROCESS: TempDB configuration has been set to the recommended filecount with a default size." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting TempDB configuration had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set TempDB configuration was disabled." @warningsplat }
 
         IF($trace3226 -eq 1) {
             TRY {
-                Enable-DbaTraceFlag -SqlInstance $SqlInstance -SqlCredential $Cred -TraceFlag 3226 | Out-Null
-                Write-Host "PROCESS: Trace Flag 3226 has been added as a startup parameter." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Adding Trace Flag 3226 had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Trace Flag 3226 was disabled." -ForegroundColor DarkYellow }
+                Enable-DbaTraceFlag @sqlsplat -TraceFlag 3226 | Out-Null
+                Write-Host "PROCESS: Trace Flag 3226 has been added as a startup parameter." @goodsplat
+            } CATCH { Write-Host "ISSUE: Adding Trace Flag 3226 had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Trace Flag 3226 was disabled." @warningsplat }
 
         IF($SetErrorlog -eq 1) {
             TRY {
-                Set-DbaErrorLogConfig -SqlInstance $SqlInstance -SqlCredential $Cred -logcount $ErrorlogCount  | Out-Null
-                Write-Host "PROCESS: Error log file count has been set to $ErrorlogCount." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Setting Error log file count had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Set Error log file count was disabled." -ForegroundColor DarkYellow }
+                Set-DbaErrorLogConfig @sqlsplat -logcount $ErrorlogCount | Out-Null
+                Write-Host "PROCESS: Error log file count has been set to $ErrorlogCount." @goodsplat
+            } CATCH { Write-Host "ISSUE: Setting Error log file count had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Set Error log file count was disabled." @warningsplat }
 
         IF($enableAlerts -eq 1) {
             TRY {
-                Invoke-DbaQuery -SqlInstance $SqlInstance -sqlCredential $cred -query "
+                Invoke-DbaQuery @sqlsplat -query "
                     EXEC msdb.dbo.sp_add_alert @name=N'Severity 16 Error', 
                             @message_id=0, 
                             @severity=16, 
@@ -500,28 +539,28 @@ Start-sleep -seconds 180
 
                     GO
                 "
-                Write-Host "PROCESS: Alerts for Errors 823, 824, 825 and Severity 16-25 have been enabled." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Enabling Alerts had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Enable Alerts was disabled." -ForegroundColor DarkYellow }
+                Write-Host "PROCESS: Alerts for Errors 823, 824, 825 and Severity 16-25 have been enabled." @goodsplat
+            } CATCH { Write-Host "ISSUE: Enabling Alerts had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Enable Alerts was disabled." @warningsplat }
         
 
     $sw5.stop()
-    Write-host "PROCESS: Configurations complete. Elapsed Time: $($sw5.Elapsed.minutes)min $($sw5.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Configurations complete. Elapsed Time: $($sw5.Elapsed.minutes)min $($sw5.Elapsed.seconds)sec" @goodsplat
 #endregion
 
 #Region - Maintenance & Tools
     $sw6 = [system.diagnostics.stopwatch]::startNew()
 
-    Write-host "PROCESS: Starting Maintenance and tools - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Starting Maintenance and tools - $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
 
 
         IF ($DeployToolsAdminDB -eq 1) {
             TRY {
-                New-DbaDatabase -SqlInstance $SqlInstance -Name $ToolsAdminDatabase -SqlCredential $Cred | Out-Null
-                Set-DbaDbOwner -SqlInstance $SqlInstance -SqlCredential $Cred | Out-Null
-                Write-Host "PROCESS: [$ToolsAdminDatabase] Database has been deployed." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Deploying [$ToolsAdminDatabase] Database had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Deploy [$ToolsAdminDatabase] was disabled." -ForegroundColor DarkYellow }
+                New-DbaDatabase @sqlsplat -Name $ToolsAdminDatabase | Out-Null
+                Set-DbaDbOwner @sqlsplat | Out-Null
+                Write-Host "PROCESS: [$ToolsAdminDatabase] Database has been deployed." @goodsplat
+            } CATCH { Write-Host "ISSUE: Deploying [$ToolsAdminDatabase] Database had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Deploy [$ToolsAdminDatabase] was disabled." @warningsplat }
 
         IF ($DeployOlaMaintenance -eq 1) {
             TRY {
@@ -539,81 +578,81 @@ Start-sleep -seconds 180
 
                 Install-DbaMaintenanceSolution @splat | Out-Null
 
-                Write-Host "PROCESS: Ola Hallengren Maintenance Solution has been deployed in [$OlaDatabase]." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Deploying/ Updating Ola Hallengren Maintenance Solution had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Deploy Ola Maintenance was disabled." -ForegroundColor DarkYellow }
+                Write-Host "PROCESS: Ola Hallengren Maintenance Solution has been deployed in [$OlaDatabase]." @goodsplat
+            } CATCH { Write-Host "ISSUE: Deploying/ Updating Ola Hallengren Maintenance Solution had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Deploy Ola Maintenance was disabled." @warningsplat }
 
         IF ($deployFirstResponder -eq 1) {
             TRY {
-                Install-DbaFirstResponderKit -SqlInstance $SqlInstance -Database $FirstResponderDatabase -SqlCredential $Cred -Force | Out-Null
-                Write-Host "PROCESS: First Responder Kit has been deployed in [$FirstResponderDatabase]." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Deploying/ Updating First Responder Kit had an error." -ForegroundColor DarkRed -BackgroundColor White }
+                Install-DbaFirstResponderKit @sqlsplat -Database $FirstResponderDatabase  -Force | Out-Null
+                Write-Host "PROCESS: First Responder Kit has been deployed in [$FirstResponderDatabase]." @goodsplat
+            } CATCH { Write-Host "ISSUE: Deploying/ Updating First Responder Kit had an error." @badsplat }
 
             IF ($RemoveSQLVersionsTable -eq 1) {
                 TRY {
-                    Invoke-DbaQuery -SqlInstance $SqlInstance -Database $FirstResponderDatabase -SqlCredential $Cred -Query "
+                    Invoke-DbaQuery @sqlsplat -Database $FirstResponderDatabase  -Query "
                         IF OBJECT_ID('dbo.SQLServerVersions') IS NOT NULL DROP TABLE dbo.SQLServerVersions" | Out-Null
-                    Write-Host "PROCESS: dbo.SQLServerVersions table has been removed from Master." -ForegroundColor Green
-                } CATCH { Write-Host "ISSUE: Removing dbo.SQLServerVersions table had an error." -ForegroundColor DarkRed -BackgroundColor White }
-            } ELSE { Write-Host "PROCESS: Remove dbo.SQLServerVersions From [master] was disabled." -ForegroundColor DarkYellow }
-        } ELSE { Write-Host "PROCESS: Deploy First Responder Kit was disabled." -ForegroundColor DarkYellow }
+                    Write-Host "PROCESS: dbo.SQLServerVersions table has been removed from [$FirstResponderDatabase]." @goodsplat
+                } CATCH { Write-Host "ISSUE: Removing dbo.SQLServerVersions table had an error." @badsplat }
+            } ELSE { Write-Host "PROCESS: Remove dbo.SQLServerVersions From [$FirstResponderDatabase] was disabled." @warningsplat }
+        } ELSE { Write-Host "PROCESS: Deploy First Responder Kit was disabled." @warningsplat }
 
         IF ($deployWhoisactive -eq 1) {
             TRY {
-                Install-DbaWhoIsActive -SqlInstance $SqlInstance -Database $whoIsActiveDatabase -SqlCredential $Cred -Force | Out-Null
-                Write-Host "PROCESS: WhoIsActive has been deployed in [$whoIsActiveDatabase]." -ForegroundColor Green
-            } CATCH { Write-Host "ISSUE: Deploying WhoIsActive had an error." -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Deploy WhoIsActive was disabled." -ForegroundColor DarkYellow }
+                Install-DbaWhoIsActive @sqlsplat -Database $whoIsActiveDatabase  -Force | Out-Null
+                Write-Host "PROCESS: WhoIsActive has been deployed in [$whoIsActiveDatabase]." @goodsplat
+            } CATCH { Write-Host "ISSUE: Deploying WhoIsActive had an error." @badsplat }
+        } ELSE { Write-Host "PROCESS: Deploy WhoIsActive was disabled." @warningsplat }
 
         IF($Deploy_SP_CheckSecurity -eq 1) {
             TRY {
                 $path     = "$ScriptPath\Supporting Files\sp_checksecurity.sql"
                 Invoke-WebRequest -Uri https://raw.githubusercontent.com/Straight-Path-Solutions/sp_CheckSecurity/main/sp_CheckSecurity.sql -OutFile $path
                 IF ((Get-ChildItem $path) -eq 0) {
-                    Write-Host "sp_checksecurity failed to download, please manually download it and put it in $path" -ForegroundColor DarkRed -BackgroundColor White
+                    Write-Host "sp_checksecurity failed to download, please manually download it and put it in $path" @badsplat
                 }
-                Invoke-DbaQuery -SqlInstance $SQLInstance -File $path -Database $SPtoolsDeploymentDatabase -SqlCredential $Cred | Out-Null
-                Write-Host "PROCESS: SP_CheckSecurity has been deployed in [$SPtoolsDeploymentDatabase]." -ForegroundColor Green
-            } CATCH { Write-host "ISSUE: SP_CheckSecurity had an error" -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Deploy SP_CheckSecurity was disabled." -ForegroundColor DarkYellow }
+                Invoke-DbaQuery @sqlsplat -File $path -Database $SPtoolsDeploymentDatabase | Out-Null
+                Write-Host "PROCESS: SP_CheckSecurity has been deployed in [$SPtoolsDeploymentDatabase]." @goodsplat
+            } CATCH { Write-host "ISSUE: SP_CheckSecurity had an error" @badsplat }
+        } ELSE { Write-Host "PROCESS: Deploy SP_CheckSecurity was disabled." @warningsplat }
 
         IF($Deploy_SP_CheckBackup   -eq 1) {
             TRY {
                 $path     = "$ScriptPath\Supporting Files\sp_checkbackup.sql"
                 Invoke-WebRequest -Uri https://raw.githubusercontent.com/Straight-Path-Solutions/sp_CheckBackup/main/sp_CheckBackup.sql -OutFile $path
                 IF ((Get-ChildItem $path) -eq 0) {
-                    Write-Host "sp_checkbackup failed to download, please manually download it and put it in $path" -ForegroundColor DarkRed -BackgroundColor White
+                    Write-Host "sp_checkbackup failed to download, please manually download it and put it in $path" @badsplat
                 }
-                Invoke-DbaQuery -SqlInstance $SQLInstance -File $path -Database $SPtoolsDeploymentDatabase  -SqlCredential $Cred | Out-Null
-                Write-Host "PROCESS: SP_CheckBackup has been deployed in [$SPtoolsDeploymentDatabase]." -ForegroundColor Green
-            } CATCH { Write-host "ISSUE: SP_CheckBackup had an error" -ForegroundColor DarkRed -BackgroundColor White }
-        } ELSE { Write-Host "PROCESS: Deploy SP_CheckBackup was disabled." -ForegroundColor DarkYellow }
+                Invoke-DbaQuery @sqlsplat -File $path -Database $SPtoolsDeploymentDatabase | Out-Null
+                Write-Host "PROCESS: SP_CheckBackup has been deployed in [$SPtoolsDeploymentDatabase]." @goodsplat
+            } CATCH { Write-host "ISSUE: SP_CheckBackup had an error" @badsplat }
+        } ELSE { Write-Host "PROCESS: Deploy SP_CheckBackup was disabled." @warningsplat }
 
         IF($Deploy_SP_CheckTempDB   -eq 1) {
             TRY {
                 $path     = "$ScriptPath\Supporting Files\sp_checktempdb.sql"
                 Invoke-WebRequest -Uri https://raw.githubusercontent.com/Straight-Path-Solutions/sp_CheckTempdb/main/sp_CheckTempdb.sql -OutFile $path
                 IF ((Get-ChildItem $path) -eq 0) {
-                    Write-Host "sp_checktempdb failed to download, please manually download it and put it in $path" -ForegroundColor DarkRed -BackgroundColor White
+                    Write-Host "sp_checktempdb failed to download, please manually download it and put it in $path" @badsplat
                 }
-                Invoke-DbaQuery -SqlInstance $SQLInstance -File $path -Database $SPtoolsDeploymentDatabase -SqlCredential $Cred | Out-Null
-                Write-Host "PROCESS: SP_CheckTempDB has been deployed in [$SPtoolsDeploymentDatabase]." -ForegroundColor Green
-            } CATCH { Write-host "ISSUE: SP_CheckTempDB had an error" -ForegroundColor DarkRed -BackgroundColor White } 
-        } ELSE { Write-Host "PROCESS: Deploy SP_CheckTempDB was disabled." -ForegroundColor DarkYellow }
+                Invoke-DbaQuery @sqlsplat -File $path -Database $SPtoolsDeploymentDatabase | Out-Null
+                Write-Host "PROCESS: SP_CheckTempDB has been deployed in [$SPtoolsDeploymentDatabase]." @goodsplat
+            } CATCH { Write-host "ISSUE: SP_CheckTempDB had an error" @badsplat } 
+        } ELSE { Write-Host "PROCESS: Deploy SP_CheckTempDB was disabled." @warningsplat }
 
     $sw6.stop()
-    Write-host "PROCESS: Maintenance and Tools complete. Elapsed Time: $($sw6.Elapsed.minutes)min $($sw6.Elapsed.seconds)sec" -ForegroundColor Green
+    Write-host "PROCESS: Maintenance and Tools complete. Elapsed Time: $($sw6.Elapsed.minutes)min $($sw6.Elapsed.seconds)sec" @goodsplat
 #endregion
 
 
 #Region - Cleanup
     IF ($AutoCreateShare -eq 1) {
         Remove-SmbShare -Name "Automated SQL Deployment Share" -Confirm:$false
-        Write-Host "PROCESS: Automated SQL Deployment Share has been removed." -ForegroundColor Green
+        Write-Host "PROCESS: Automated SQL Deployment Share has been removed." @goodsplat
     }
 
 #Endregion
 
 $sw0.stop()
-Write-host "PROCESS: Deployment Script complete. Elapsed Time: $($sw0.Elapsed.hours)hrs $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" -ForegroundColor Green
+Write-host "PROCESS: Deployment Script complete. Elapsed Time: $($sw0.Elapsed.hours)hrs $($sw0.Elapsed.minutes)min $($sw0.Elapsed.seconds)sec" @goodsplat
 Stop-Transcript
