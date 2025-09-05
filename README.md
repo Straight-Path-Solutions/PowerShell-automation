@@ -6,10 +6,10 @@ These scripts are designed to save time, reduce human error, and streamline SQL 
 ## 📂 Scripts Included
 
 
-### 1. [Dbatools SQL Deployment](./scripts/DBatools%20SQL%20Deployment/)
+### 1. [Dbatools SQL Deployment](./Scripts/DBatools%20SQL%20Deployment/)
 Automates the installation and initial configuration of SQL Server, including setup of service accounts, features, and basic settings.  
-📁 [Script Folder](./scripts/DBatools%20SQL%20Deployment/)  
-📝 [Blog Post]()
+📁 [Script Folder](./Scripts/DBatools%20SQL%20Deployment/)  
+📝 [Blog Post](https://straightpathsql.com/archives/2025/09/deploy-sql-server-with-this-one-script-dbatools/)
 
 ---
 <!--
