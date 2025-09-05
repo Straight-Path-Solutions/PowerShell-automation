@@ -28,7 +28,7 @@ $sw0 = [system.diagnostics.stopwatch]::startNew()
 Clear-Host
 
 #Region - Variables
-    $ComputerName               = 'labsql3'
+    $ComputerName               = 'labsql1'
     $instancename               = '' <#Leave blank for a default instance, only put the name of the named instance here - NOT the Hostname\Instancename. 
         Note -                      This process assumes you aren't naming a named instance "DEFAULT", if you do plan on naming your instance 'Default' you will need to do
                                     some surgery on your side. The main issue this would cause with this process is that folder naming of a default instance is 'X:\DEFAULT\SQLdata' 
@@ -150,11 +150,13 @@ Clear-Host
             SqlInstance = "$ComputerName\$instancename"
         }
         $SqlInstance = "$ComputerName\$instancename"
+        $updateinst =  $instancename
     } ELSE {
         $sqlsplat = @{
             SqlInstance = $ComputerName
         }
         $SqlInstance = $ComputerName
+        $updateinst = $computername
     }   
 
     #Adding credentials to the sql conneciton splat if the install sql variable is set to 1
@@ -331,8 +333,10 @@ Clear-Host
             IF ($AutoCreateShare = 1) { $updatepath = "$share\SQL Updates\"} 
             ELSE { $updatepath = $ManualPathtoUpdate }
 
+
             $splat = @{
                 ComputerName = $ComputerName
+                instancename = $updateinst
                 Restart      = $true
                 Path         = $updatepath
                 Confirm      = $false
