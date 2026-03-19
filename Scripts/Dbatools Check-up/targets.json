@@ -1,0 +1,6 @@
+[
+    {"ComputerName":"labsql1","InstanceName":"express","Description":"Future","CredKey":"prod"}
+    ,   {"ComputerName":"labsql1","InstanceName":"mssqlserver","Description":"Future","CredKey":"prod"}
+    ,   {"ComputerName":"labsql3","InstanceName":"mssqlserver","Description":"Future","CredKey":"prod"}
+
+]

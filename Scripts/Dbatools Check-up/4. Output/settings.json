@@ -1,0 +1,48 @@
+{
+    "Suite":  {
+                  "RunTimestamp":  "2026-03-19 00:32:12",
+                  "RunMode":  "Full",
+                  "Version":  "1.0.0"
+              },
+    "CheckTimeoutSeconds":  300,
+    "Logging":  {
+                    "EnableTranscript":  true,
+                    "TimestampEveryPack":  true
+                },
+    "ConnectionTestTimeoutSeconds":  10,
+    "Database":  {
+                     "AllowPercentGrowth":  false,
+                     "Enabled":  true,
+                     "GrowthEventsFailCount":  25,
+                     "RequireTde":  false,
+                     "DbOwnerExpectedPrincipal":  "sa",
+                     "CompatibilityLevelComplianceEnabled":  true,
+                     "GrowthEventsAttentionCount":  5,
+                     "TrustworthyAllowList":  [
+                                                  "msdb"
+                                              ],
+                     "RecoveryModelComplianceEnabled":  false,
+                     "RequirePageVerifyChecksum":  true,
+                     "MinBackupDiffHours":  24,
+                     "VlfCountFail":  300,
+                     "QueryStoreFailIfError":  true,
+                     "MinBackupFullHours":  168,
+                     "FreeSpacePctAttention":  15,
+                     "QueryStoreWarnIfOff":  true,
+                     "DbOwnerComplianceEnabled":  true,
+                     "RequireAutoShrinkOff":  true,
+                     "AllowMultipleLogFiles":  false,
+                     "RequireAutoCreateStats":  false,
+                     "IncludeSystem":  true,
+                     "FreeSpacePctFail":  5,
+                     "VlfCountWarn":  150,
+                     "RequireAutoUpdateStats":  true,
+                     "MinBackupLogHours":  2,
+                     "RequireTrustworthyOff":  true,
+                     "RequireAutoCloseOff":  true,
+                     "ExcludeDatabases":  [
+
+                                          ],
+                     "RecoveryModelExpected":  "Full"
+                 }
+}
