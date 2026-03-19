@@ -12,9 +12,9 @@ Automates the installation and initial configuration of SQL Server, including se
 
 
 
-### 2. [Dbatools Check-Up](./Scripts/DBatools%20Check-Up/)
+### 2. [Dbatools Check-Up](./Scripts/Dbatools%20Check-Up/)
 Performs a comprehensive health check of SQL Server instances, covering configuration, performance, security, and best practices. A great way to quickly assess the state of your SQL Servers.
-- 📁 [Script Folder](./Scripts/DBatools%20Check-Up/)  
+- 📁 [Script Folder](./Scripts/Dbatools%20Check-Up/)  
 - 📝 [Blog Post](https://straightpathsql.com/archives/author/davidseis/)
 
 ---
