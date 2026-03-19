@@ -1,0 +1,1845 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>SQL Server Instances - Health Report</title>
+<style>
+  :root{
+    --bg:#f9fafb;--card:#ffffff;--accent:#2563eb;--accent2:#3b82f6;
+    --muted:#4b5563;--text:#111827;--border:#e5e7eb;
+    --good:#059669;--warn:#d97706;--bad:#dc2626;--info:#0ea5e9;
+    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
+  }
+  html,body{height:100%;margin:0;background:var(--bg);color:var(--text)}
+  .container{max-width:1200px;margin:28px auto;padding:20px;}
+  header{display:flex;align-items:center;gap:16px;margin-bottom:18px}
+  header h1{font-size:20px;margin:0;color:#1f2937}
+  footer{color:var(--muted);font-size:13px;margin-top:18px;text-align:center}
+  .topbar{display:flex;gap:12px;align-items:center;margin-bottom:16px}
+  .card{background:var(--card);border-radius:12px;padding:14px;box-shadow:0 4px 12px rgba(0,0,0,0.05);border:1px solid var(--border)}
+  .muted{color:var(--muted);font-size:13px}
+
+  .nav-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;position:sticky;top:0;z-index:6;
+           background:var(--bg);padding:8px 0 6px;border-bottom:2px solid var(--border);margin-bottom:0;}
+  .findings-sticky{position:sticky;top:45px;z-index:5;background:var(--bg);padding:8px 0 4px;margin-bottom:8px;}
+  .nav-tabs{display:flex;gap:4px;background:#f3f4f6;border:1px solid var(--border);border-radius:10px;padding:3px;}
+  .tab{padding:6px 14px;border-radius:7px;cursor:pointer;background:transparent;color:var(--muted);border:none;font-weight:700;font-size:13px;transition:all .15s;white-space:nowrap;}
+  .tab:hover{color:var(--text);}
+  .tab.active{background:#fff;color:var(--accent);box-shadow:0 1px 4px rgba(0,0,0,0.10);border:1px solid var(--border);}
+  .inst-jump-select{padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:#fff;
+                    font-size:13px;font-weight:600;color:var(--text);cursor:pointer;max-width:220px;}
+  .inst-jump-select:focus{outline:none;border-color:var(--accent);}
+
+  .btn{padding:8px 10px;border-radius:8px;background:white;border:1px solid var(--border);cursor:pointer;color:var(--accent);font-weight:700;font-size:13px;}
+  .btn:hover{background:#eff6ff;border-color:var(--accent2)}
+  .btn.secondary{color:#111827}
+  .btn.danger{color:var(--bad);border-color:var(--bad)}
+  .btn.danger:hover{background:#fef2f2}
+  .btn.warn-btn{color:var(--warn);border-color:var(--warn)}
+  .btn.warn-btn:hover{background:#fffbeb}
+  .btn.info-btn{color:var(--info);border-color:var(--info)}
+  .btn.info-btn:hover{background:#f0f9ff}
+  .btn.active-filter{background:#dbeafe;border-color:var(--accent);color:var(--accent)}
+  .btn.danger.active-filter{background:#fef2f2;border-color:var(--bad);color:var(--bad)}
+  .btn.warn-btn.active-filter{background:#fffbeb;border-color:var(--warn);color:var(--warn)}
+  .btn.info-btn.active-filter{background:#f0f9ff;border-color:var(--info);color:var(--info)}
+
+  .toggle-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;
+               border:1px solid var(--border);background:#f3f4f6;cursor:pointer;
+               font-size:12px;font-weight:700;color:var(--muted);user-select:none;transition:all .15s;}
+  .toggle-pill:hover{border-color:#9ca3af;color:#374151;}
+  .toggle-pill.active{background:#1e293b;border-color:#1e293b;color:#fff;}
+  .toggle-pill .pill-icon{font-size:11px;}
+
+  .kpi-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-top:10px}
+  .kpi-pill{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;
+            border:1px solid var(--border);background:#f9fafb;font-weight:800;font-size:12px;
+            cursor:pointer;transition:all .15s;}
+  .kpi-pill:hover{border-color:#9ca3af;background:#f3f4f6;}
+  .kpi-pill.active-filter{background:#dbeafe;border-color:var(--accent);}
+  .kpi-dot{width:10px;height:10px;border-radius:99px;background:#9ca3af}
+  .kpi-dot.pass{background:var(--good)} .kpi-dot.attention{background:var(--warn)}
+  .kpi-dot.fail{background:var(--bad)} .kpi-dot.info{background:var(--info)}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px;border:1px solid rgba(17,24,39,0.25);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);}
+
+  .avg-wrap{display:flex;align-items:center;gap:16px;}
+  .avg-gauge{width:140px;height:140px;position:relative;flex:0 0 auto;}
+  .avg-gauge svg{width:140px;height:140px;transform:rotate(-90deg);}
+  .avg-center{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:28px;color:#111827;}
+  .avg-label{font-size:14px;font-weight:900;margin-bottom:4px;}
+  .ring-track{stroke:#e5e7eb;stroke-width:12;fill:none;}
+  .ring-progress{stroke:var(--bad);stroke-width:12;fill:none;stroke-linecap:round;transition:stroke-dashoffset .6s ease,stroke .2s ease;filter:drop-shadow(0 2px 6px rgba(0,0,0,.15));}
+
+  .table-wrap{overflow:auto;}
+  .table{width:100%;border-collapse:collapse;table-layout:fixed;}
+  .table thead th{
+    position:sticky;top:0;z-index:2;
+    font-size:12px;text-transform:uppercase;letter-spacing:.02em;text-align:left;
+    padding:10px;border-bottom:1px solid var(--border);color:#374151;
+    cursor:pointer;user-select:none;white-space:nowrap;
+    background:rgba(255,255,255,0.98);
+    box-shadow:0 1px 2px rgba(0,0,0,0.08);
+    overflow:hidden;
+  }
+  .findings-table-wrap{overflow-x:auto;height:70vh;overflow-y:auto;}
+  .findings-table-wrap .table thead th{position:sticky;top:0;z-index:3;background:rgba(255,255,255,0.98);box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+
+  .table thead th .sort-ind{opacity:.7;margin-left:6px;font-size:11px}
+  .table tbody td{padding:10px;border-bottom:1px solid var(--border);vertical-align:top;word-break:break-word;white-space:normal;}
+  .findings-table-wrap .table{table-layout:auto;}
+  .findings-table-wrap.show-inst .table th:nth-child(1){width:90px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(2){width:90px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(3){width:170px;}
+  .findings-table-wrap.show-inst .table th:nth-child(4){width:140px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(5){width:80px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(6){width:60px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(7){width:60px;white-space:nowrap;}
+  .findings-table-wrap.show-inst .table th:nth-child(8){min-width:260px;}
+  .findings-table-wrap.hide-inst .table th:nth-child(1){width:90px;white-space:nowrap;}
+  .findings-table-wrap.hide-inst .table th:nth-child(2){width:170px;}
+  .findings-table-wrap.hide-inst .table th:nth-child(3){width:140px;white-space:nowrap;}
+  .findings-table-wrap.hide-inst .table th:nth-child(4){width:80px;white-space:nowrap;}
+  .findings-table-wrap.hide-inst .table th:nth-child(5){width:60px;white-space:nowrap;}
+  .findings-table-wrap.hide-inst .table th:nth-child(6){width:60px;white-space:nowrap;}
+  .findings-table-wrap.hide-inst .table th:nth-child(7){min-width:260px;}
+  .table th:nth-child(1){width:12%}.table th:nth-child(2){width:11%}.table th:nth-child(3){width:18%}
+  .table th:nth-child(4){width:16%}.table th:nth-child(5){width:8%}.table th:nth-child(6){width:8%}.table th:nth-child(7){width:27%}
+  .table tbody tr:hover{background:#f3f4f6;}
+  .table tbody tr.row-attention{background:#fffbeb;}
+  .table tbody tr.row-fail{background:#fef2f2;}
+  .table tbody tr.row-info{background:#f0f9ff;}
+
+  .filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;
+              background:#f9fafb;border:1px solid var(--border);border-radius:10px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.07);}
+  .filter-section{display:flex;align-items:center;gap:6px;}
+  .filter-section label{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+  .filter-bar select,.filter-bar input[type=search],.filter-bar input[type=number]{
+    padding:6px 8px;border:1px solid var(--border);border-radius:8px;background:#fff;
+    font-size:13px;color:var(--text);}
+  .filter-divider{width:1px;height:28px;background:var(--border);flex-shrink:0;}
+  .filter-bar .spacer{flex:1}
+
+  .ov-filter-bar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;padding:10px 14px;margin-bottom:10px;
+                 background:#f9fafb;border:1px solid var(--border);border-radius:10px;
+                 box-shadow:0 2px 8px rgba(0,0,0,0.07);}
+  .ov-filter-bar .filter-section label{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;}
+  .ov-filter-bar input[type=search],.ov-filter-bar input[type=number]{
+    padding:5px 8px;border:1px solid var(--border);border-radius:8px;background:#fff;font-size:13px;color:var(--text);}
+
+  .metric-pill{display:inline-flex;padding:4px 9px;border-radius:6px;border:1px solid var(--border);
+               background:#fff;cursor:pointer;font-size:11px;font-weight:700;color:var(--muted);
+               white-space:nowrap;transition:all .12s;}
+  .metric-pill:hover{border-color:#9ca3af;color:#374151;}
+  .metric-pill.active{background:#dbeafe;border-color:var(--accent);color:var(--accent);}
+
+  .cat-chip-selected{outline:3px solid var(--accent);outline-offset:2px;}
+
+  .toggle-group{display:flex;align-items:center;gap:6px;}
+  .toggle-group-label{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;white-space:nowrap;margin-right:2px;}
+
+  .quick-row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;}
+  .quick-row .qlabel{font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.04em;}
+  .row-count{font-size:12px;font-weight:700;color:var(--muted);padding:4px 10px;border-radius:999px;background:#f3f4f6;border:1px solid var(--border);}
+  .row-count span{color:var(--accent);}
+
+  .inst-link{color:var(--accent);text-decoration:none;font-weight:800;}
+  .inst-link:hover{text-decoration:underline;}
+  .heat{min-width:72px;text-align:center;font-weight:900;border-radius:8px;padding:6px 10px;display:inline-block;border:1px solid rgba(17,24,39,0.25);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);}
+  .heat.-na{color:var(--muted);background:#f3f4f6;font-weight:700;border:1px solid var(--border);box-shadow:none;}
+  .heat-sm{min-width:52px;text-align:center;font-weight:900;border-radius:6px;padding:4px 7px;display:inline-block;font-size:12px;border:1px solid rgba(17,24,39,0.25);box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);}
+  .heat-sm.-na{color:var(--muted);background:#f3f4f6;font-weight:700;border:1px solid var(--border);box-shadow:none;}
+  #instCatTable{table-layout:auto;}
+  #instCatTable th:first-child{min-width:130px;white-space:nowrap;}
+  #instCatTable th:nth-child(2){min-width:80px;white-space:nowrap;}
+  #instCatTable th:nth-child(n+3){min-width:80px;white-space:nowrap;font-size:11px;}
+  #instCatTable td{white-space:nowrap;padding:8px 10px;}
+
+  .help-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;
+            border-radius:50%;background:#fff;border:1px solid var(--border);cursor:pointer;
+            color:var(--accent);font-weight:900;font-size:14px;transition:all .15s;}
+  .help-btn:hover{background:#eff6ff;border-color:var(--accent2);}
+  
+  .modal{display:none;position:fixed;inset:0;z-index:100;background:rgba(0,0,0,0.5);
+         align-items:center;justify-content:center;padding:20px;}
+  .modal.active{display:flex;}
+  .modal-content{background:#fff;border-radius:12px;max-width:800px;max-height:90vh;
+                 overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);}
+  .modal-header{padding:20px 24px;border-bottom:1px solid var(--border);display:flex;
+                align-items:center;justify-content:space-between;}
+  .modal-header h2{margin:0;font-size:18px;font-weight:900;}
+  .modal-close{background:none;border:none;font-size:24px;cursor:pointer;color:var(--muted);
+               padding:0;width:32px;height:32px;display:flex;align-items:center;justify-content:center;
+               border-radius:6px;transition:all .15s;}
+  .modal-close:hover{background:#f3f4f6;color:var(--text);}
+  .modal-body{padding:24px;}
+  .modal-body h3{font-size:16px;font-weight:900;margin:24px 0 12px 0;color:#1f2937;}
+  .modal-body h3:first-child{margin-top:0;}
+  .modal-body p{margin:8px 0;line-height:1.6;color:#4b5563;}
+  .modal-body ul{margin:8px 0;padding-left:24px;color:#4b5563;}
+  .modal-body li{margin:4px 0;line-height:1.6;}
+  .modal-body code{background:#f3f4f6;padding:2px 6px;border-radius:4px;font-size:13px;
+                   font-family:monospace;color:#1f2937;}
+  .modal-body .tip{background:#eff6ff;border-left:3px solid var(--accent);padding:12px 16px;
+                   border-radius:6px;margin:12px 0;}
+  .modal-body .tip strong{color:var(--accent);}
+
+  .version-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+                 border-radius:6px;background:#f3f4f6;border:1px solid var(--border);
+                 font-size:12px;font-weight:700;color:var(--muted);}
+  .version-badge .v-icon{color:var(--accent);}
+
+  @media print{
+    .btn,.tabs,#importBtn,#exportBtn,#exportXlsBtn,#fileInput,.help-btn,.modal{display:none !important;}
+    .container{max-width:none;margin:0;padding:0}
+    .card{box-shadow:none} body{background:#fff}
+    .findings-sticky{position:static;}
+    .findings-table-wrap{max-height:none;overflow:visible;}
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div>
+      <h1>SQL Server Instance Health Report</h1>
+      <p style="margin:0;color:var(--muted);font-size:13px">Read-only checks with tri-state scoring (Pass / Attn / Fail) plus Informational output.</p>
+    </div>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px;">
+      <span class="version-badge" id="versionBadge">
+        <span class="v-icon">⚙️</span>
+        <span id="engineVersion">v?.?.?</span>
+      </span>
+      <button class="help-btn" id="helpBtn" title="Help & Documentation">?</button>
+    </div>
+  </header>
+
+  <div style="font-size:13px;color:var(--muted);margin-bottom:10px;">
+    Generated: <span id="generatedTime"></span>
+  </div>
+
+  <div class="topbar">
+    <div style="flex:1" class="card">
+      <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+        <div style="min-width:220px">
+          <div style="font-weight:900">Overview</div>
+          <div class="muted" id="instanceCount">Instances: 0</div>
+          <div class="muted" id="scopeHint">Scope: 0 of 0</div>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;gap:20px;min-width:320px">
+          <div class="avg-wrap">
+            <div class="avg-gauge">
+              <svg viewBox="0 0 140 140" aria-label="Average health gauge">
+                <circle class="ring-track" cx="70" cy="70" r="56"></circle>
+                <circle id="avgRing" class="ring-progress" cx="70" cy="70" r="56"
+                        stroke-dasharray="351.86" stroke-dashoffset="351.86"></circle>
+              </svg>
+              <div id="avgPct" class="avg-center">--%</div>
+            </div>
+            <div>
+              <div class="avg-label">Average Health</div>
+              <div class="muted" id="avgBreakdown">--</div>
+              <div class="kpi-row" id="runTotals"></div>
+            </div>
+          </div>
+        </div>
+        <div style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <button class="btn" id="importBtn" title="Import findings from JSON file">📁 Import JSON</button>
+          <button class="btn secondary" id="exportBtn" title="Export findings to JSON file">💾 Export JSON</button>
+          <button class="btn secondary" id="exportXlsBtn" title="Download as Excel workbook">⬇️ Export Workbook</button>
+          <input id="fileInput" type="file" accept="application/json,.json" hidden />
+        </div>
+      </div>
+      <div class="muted" style="margin-top:10px">
+        <strong>Color scale:</strong> Red (0-50%) → Amber (50-80%) → Green (80-100%). 
+        Informational rows are blue and do not affect health score.
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-bar" id="navBar">
+    <div class="nav-tabs" id="tabs"></div>
+  </div>
+  <div id="contentArea" style="margin-top:10px"></div>
+  <footer>
+    Straight Path IT Solutions - David Seis - 
+    <a href="https://straightpathsql.com/blog" target="_blank" rel="noopener">Documentation & Blog</a>
+  </footer>
+</div>
+
+<!-- Help Modal -->
+<div class="modal" id="helpModal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h2>📘 SQL Health Report - User Guide</h2>
+      <button class="modal-close" id="closeHelp">&times;</button>
+    </div>
+    <div class="modal-body">
+      <h3>🎯 Understanding the Report</h3>
+      <p>
+        This report provides a comprehensive health assessment of your SQL Server instances using 
+        read-only checks organized into categories like Storage, Security, Performance, and Maintenance.
+      </p>
+
+      <h3>📊 Health Scoring</h3>
+      <p>Each instance receives a health score (0-100%) based on weighted checks:</p>
+      <ul>
+        <li><strong style="color:var(--good);">Pass (Green):</strong> Check passed - no action needed (100 points)</li>
+        <li><strong style="color:var(--warn);">Attention (Amber):</strong> Warning condition - review recommended (60 points)</li>
+        <li><strong style="color:var(--bad);">Fail (Red):</strong> Critical issue - immediate action required (0 points)</li>
+        <li><strong style="color:var(--info);">Info (Blue):</strong> Informational only - does not affect score</li>
+      </ul>
+      
+      <div class="tip">
+        <strong>Tip:</strong> The overall health score is calculated by averaging weighted check results. 
+        High-priority checks (like security issues) have more weight than low-priority checks.
+      </div>
+
+      <h3>🗂️ Navigating the Report</h3>
+      <p><strong>Overview Tab:</strong> See all instances at a glance with category breakdowns</p>
+      <ul>
+        <li>Click category cards to filter findings by that category</li>
+        <li>Use "Hide above X%" to focus on problem instances</li>
+        <li>Click any instance name to view detailed findings</li>
+      </ul>
+
+      <p><strong>Instance Tab:</strong> Deep dive into a single instance</p>
+      <ul>
+        <li>Click category chips to filter findings by category</li>
+        <li>Click KPI pills (Pass/Attn/Fail/Info) to filter by status</li>
+        <li>Use the dropdown to switch between instances</li>
+      </ul>
+
+      <p><strong>All Findings Tab:</strong> View findings across all instances</p>
+      <ul>
+        <li>Quick filters: Jump to common views (failures only, attention+failures, etc.)</li>
+        <li>Advanced filters: Filter by category, spoke, priority, status, label, or function</li>
+        <li>Hide toggles: Remove Pass/Info/Entry checks from view</li>
+      </ul>
+
+      <h3>🔍 Filtering & Searching</h3>
+      <p>All tables support sorting by clicking column headers. The arrow (^ or v) shows sort direction.</p>
+      <p>Use the filter bars to narrow results:</p>
+      <ul>
+        <li><strong>Category:</strong> Group checks by domain (Storage, Security, etc.)</li>
+        <li><strong>Spoke:</strong> Filter by the PowerShell script that ran the check</li>
+        <li><strong>Priority:</strong> High/Medium/Low importance level</li>
+        <li><strong>Status:</strong> Pass/Attention/Fail/Info</li>
+        <li><strong>Label:</strong> Search check names (e.g., "backup", "memory")</li>
+        <li><strong>Function:</strong> Filter by dbatools function (e.g., "Get-Dba*")</li>
+      </ul>
+
+      <div class="tip">
+        <strong>Pro Tip:</strong> Use "Hide: Entries" to remove granular per-database or per-job findings 
+        and focus on instance-level checks. Entry checks have an <code>ENTRY</code> tag.
+      </div>
+
+      <h3>💾 Import & Export</h3>
+      <p><strong>Import JSON:</strong> Load findings from a different health check run</p>
+      <p><strong>Export JSON:</strong> Save the current findings for archival or comparison</p>
+      <p><strong>Export Workbook:</strong> Download an Excel file with two sheets:</p>
+      <ul>
+        <li><strong>Instances Overview:</strong> Health scores by category for all instances</li>
+        <li><strong>All Findings:</strong> Complete findings list with all details</li>
+      </ul>
+
+      <h3>📋 Entry Checks</h3>
+      <p>
+        Some checks return multiple results (e.g., one per database or per job). These are marked 
+        with an <code>ENTRY</code> tag. Use the "Hide: Entries" toggle to collapse these into a 
+        summary view when you want a high-level overview.
+      </p>
+
+      <h3>🎨 Understanding Colors</h3>
+      <p>The color scale is continuous from red to green:</p>
+      <ul>
+        <li><strong style="color:#7A0619;">0-40%:</strong> Dark red - critical</li>
+        <li><strong style="color:#dc2626;">40-50%:</strong> Red - poor</li>
+        <li><strong style="color:#F59E0B;">50-80%:</strong> Amber - warning</li>
+        <li><strong style="color:#1E7B34;">80-90%:</strong> Light green - good</li>
+        <li><strong style="color:#0B5D2A;">90-100%:</strong> Dark green - excellent</li>
+      </ul>
+
+      <h3>🔗 URL Hash Navigation</h3>
+      <p>
+        The report preserves your view in the URL. You can bookmark or share links to specific:
+      </p>
+      <ul>
+        <li>Tabs (e.g., <code>#tab=overview</code>)</li>
+        <li>Instances (e.g., <code>#tab=instance&instance=SQLPROD-01</code>)</li>
+        <li>Filtered views (e.g., <code>#tab=allfindings&status=fail&cat=Security</code>)</li>
+      </ul>
+
+      <h3>🖨️ Printing</h3>
+      <p>
+        Use your browser's print function (Ctrl+P / Cmd+P) to generate a PDF. 
+        Buttons and interactive elements are hidden for clean printouts.
+      </p>
+
+      <h3>⚙️ Suite Version</h3>
+      <p>
+        The suite version is displayed in the top-right corner. This helps identify which version 
+        of the SQL Health Suite generated this report when troubleshooting or comparing results.
+      </p>
+
+      <div class="tip">
+        <strong>Need Help?</strong> Visit 
+        <a href="https://straightpathsql.com/blog" target="_blank" rel="noopener">straightpathsql.com/blog</a> 
+        for documentation, guides, and troubleshooting tips.
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════════
+// DATA INJECTION POINT - The PowerShell engine injects JSON here
+// ═══════════════════════════════════════════════════════════════════════════
+const data = {
+  version: "1.0.0",  // Suite version - injected by engine
+  instances: [
+    {
+      name:"SQLPROD-01", description:"Primary OLTP host",
+      lastCheck:"2025-09-19T09:00:00Z",
+      checks:[
+        {label:"Disk free >= 20%",           category:"Storage",     priority:"High",   status:"pass",      details:"C: 28%, D: 33%",                           weight:15, source:"Get-DbaDiskSpace",       spoke:"Checks.Host.ps1"},
+        {label:"Backups recent (<=24h)",      category:"Maintenance", priority:"High",   status:"attention", details:"Last full 28h ago",                         weight:12, source:"Get-DbaDbBackupHistory", spoke:"Checks.Maintenance.ps1"},
+        {label:"Max memory configured",       category:"Performance", priority:"Medium", status:"pass",      details:"MaxServerMemory=64GB",                      weight:10, source:"Get-DbaMaxMemory",       spoke:"Checks.Instance.ps1"},
+        {label:"xp_cmdshell disabled",        category:"Security",    priority:"High",   status:"fail",      details:"Enabled",                                   weight:15, source:"Get-DbaSpConfigure",     spoke:"Checks.Instance.ps1"},
+        {label:"Build",                       category:"Instance",    priority:"Low",    status:"info",      details:"SQL Server 2022 CU10",                      weight:0,  source:"Get-DbaBuild",           spoke:"Checks.Instance.ps1"},
+        {label:"SPN Issue - Entry",           category:"Security",    priority:"Medium", status:"attention", details:"Missing SPN: MSSQLSvc/sqlprod-01.corp:1433", weight:8,  source:"Test-DbaSpn",            spoke:"Checks.Networking.ps1"},
+        {label:"Job Runtime Anomaly - Entry", category:"Performance", priority:"Low",    status:"attention", details:"[_MAINT_DatabaseBackup] Last 30 day(s): outliers 1", weight:5, source:"Get-DbaAgentJobHistory", spoke:"Checks.Agent.ps1"}
+      ]
+    },
+    {
+      name:"SQLEXPRESS-01", description:"Express Edition dev host",
+      lastCheck:"2025-09-19T09:05:00Z",
+      checks:[
+        {label:"Disk free >= 20%",        category:"Storage",    priority:"High",   status:"pass", details:"C: 55%",                                    weight:15, source:"Get-DbaDiskSpace",    spoke:"Checks.Host.ps1"},
+        {label:"SQL Agent enabled",       category:"Instance",   priority:"Medium", status:"info", details:"Check skipped: not applicable on Express.",  weight:0,  source:"Get-DbaSpConfigure", spoke:"Checks.Instance.ps1"},
+        {label:"Server Audits - Presence",category:"Compliance", priority:"High",   status:"info", details:"Get-DbaInstanceAudit returned no data.",     weight:0,  source:"Get-DbaInstanceAudit",spoke:"Checks.Audit.ps1"},
+        {label:"Build",                   category:"Instance",   priority:"Low",    status:"info", details:"SQL Server 2022 Express",                   weight:0,  source:"Get-DbaBuild",        spoke:"Checks.Instance.ps1"}
+      ]
+    }
+  ]
+};
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CORE HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+
+function latestCheckTime(instances){
+  let latest=null;
+  (instances||[]).forEach(inst=>{
+    if(inst.lastCheck){
+      const d=new Date(inst.lastCheck);
+      if(!isNaN(d)&&(!latest||d>latest))latest=d;
+    }
+  });
+  return latest;
+}
+
+function setGeneratedTime(instances){
+  const el=document.getElementById('generatedTime');
+  if(!el)return;
+  const t=latestCheckTime(instances);
+  el.textContent=t?t.toLocaleString():new Date().toLocaleString();
+}
+
+function setEngineVersion(version) {
+  const el = document.getElementById('engineVersion');
+  if (!el) return;
+  if (!version) { el.textContent = 'v?.?.?'; return; }
+  const v = String(version).trim();
+  el.textContent = v.startsWith('v') ? v : 'v' + v;
+}
+
+const STATUS_LABEL  ={pass:"Pass",attention:"Attn",fail:"Fail",info:"Info"};
+const STATUS_ORDER  ={pass:4,info:3,attention:2,fail:1};
+const PRIORITY_ORDER={high:3,medium:2,low:1};
+const SCORE_STATUSES={pass:true,attention:true,fail:true};
+const STATUS_SCORE  ={pass:100,attention:60,fail:0};
+const HEALTH_STOPS  =[{p:0,c:'#7A0619'},{p:50,c:'#F59E0B'},{p:80,c:'#1E7B34'},{p:100,c:'#0B5D2A'}];
+
+// Color calculation with accessibility considerations
+function hexToRgb(h){
+  const m=/^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(h);
+  return m?{r:parseInt(m[1],16),g:parseInt(m[2],16),b:parseInt(m[3],16)}:{r:0,g:0,b:0};
+}
+
+function relLum(c){
+  const s=[c.r,c.g,c.b].map(v=>v/255).map(x=>x<=0.03928?x/12.92:Math.pow((x+0.055)/1.055,2.4));
+  return 0.2126*s[0]+0.7152*s[1]+0.0722*s[2];
+}
+
+function cRatio(a,b){
+  const L1=relLum(hexToRgb(a)),L2=relLum(hexToRgb(b));
+  const hi=Math.max(L1,L2),lo=Math.min(L1,L2);
+  return(hi+0.05)/(lo+0.05);
+}
+
+function lerpHex(a,b,t){
+  const ca=hexToRgb(a),cb=hexToRgb(b);
+  return'#'+[
+    Math.round(ca.r+(cb.r-ca.r)*t),
+    Math.round(ca.g+(cb.g-ca.g)*t),
+    Math.round(ca.b+(cb.b-ca.b)*t)
+  ].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
+function colorForPct(pct){
+  const p=Math.max(0,Math.min(100,+pct||0));
+  for(let i=0;i<HEALTH_STOPS.length-1;i++){
+    const a=HEALTH_STOPS[i],b=HEALTH_STOPS[i+1];
+    if(p>=a.p&&p<=b.p)return lerpHex(a.c,b.c,(p-a.p)/(b.p-a.p||1));
+  }
+  return HEALTH_STOPS[HEALTH_STOPS.length-1].c;
+}
+
+function textOn(bg){
+  return cRatio(bg,'#111827')>=cRatio(bg,'#ffffff')?'#111827':'#ffffff';
+}
+
+const INFO_BG='#0ea5e9',INFO_FG='#ffffff';
+const STATUS_TO_PCT={pass:95,info:null,attention:60,fail:10};
+
+function chipHTML(st){
+  st=(st||'fail').toLowerCase();
+  if(st==='info')return'<span class="chip" style="background:'+INFO_BG+';color:'+INFO_FG+'">Info</span>';
+  const bg=colorForPct(STATUS_TO_PCT[st]??10);
+  return'<span class="chip" style="background:'+bg+';color:'+textOn(bg)+'">'+(STATUS_LABEL[st]||st)+'</span>';
+}
+
+function heatCellHTML(pct,sm){
+  const cls=sm?'heat-sm':'heat';
+  if(pct==null||isNaN(pct))return'<span class="'+cls+' -na">n/a</span>';
+  const bg=colorForPct(pct);
+  return'<span class="'+cls+'" style="background:'+bg+';color:'+textOn(bg)+'">'+pct+'%</span>';
+}
+
+// Entry check detection - checks if label ends with "- Entry" (case insensitive)
+const LEGACY_ENTRY_LABELS=new Set([
+  'Wait Statistic Entry','Error Log Entry','[DB] Full Backup - Database',
+  '[DB] Diff Backup - Database','[DB] Log Backup - Database','Last Good CHECKDB - Database'
+]);
+
+function isEntryCheck(label){
+  if(!label)return false;
+  if(LEGACY_ENTRY_LABELS.has(label))return true;
+  return/[-–]\s*entry\s*$/i.test(label);
+}
+
+function formatSpoke(s){
+  return s?s.replace(/^Checks\./i,'').replace(/\.ps1$/i,''):'';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HEALTH COMPUTATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function computeHealth(inst){
+  const checks=inst.checks||[];
+  let tw=0,acc=0;
+  const byC={};
+  const tot={pass:0,attention:0,fail:0,info:0,scored:0};
+  
+  checks.forEach(ch=>{
+    const st=String(ch.status||'fail').toLowerCase();
+    if(st==='info'){
+      tot.info++;
+      return;
+    }
+    if(!SCORE_STATUSES[st])return;
+    
+    const w=Number.isFinite(ch.weight)?ch.weight:10;
+    const s=STATUS_SCORE[st]??0;
+    tw+=w;
+    acc+=s*w;
+    
+    const cat=ch.category||'Uncategorized';
+    if(!byC[cat])byC[cat]={sum:0,weight:0,pass:0,attention:0,fail:0};
+    byC[cat].sum+=s*w;
+    byC[cat].weight+=w;
+    byC[cat][st]++;
+    
+    tot[st]++;
+    tot.scored++;
+  });
+  
+  const score=tw>0?Math.round(acc/tw):0;
+  Object.values(byC).forEach(c=>{
+    c.pct=c.weight>0?Math.round(c.sum/c.weight):0;
+  });
+  
+  return{score,byCategory:byC,totals:tot};
+}
+
+function annotateAll(instances){
+  return(instances||[]).map(i=>({
+    name:i.name,
+    description:i.description||'',
+    lastCheck:i.lastCheck||null,
+    checks:i.checks||[],
+    computed:computeHealth(i)
+  }));
+}
+
+function allCategories(instances){
+  const s=new Set();
+  (instances||[]).forEach(i=>Object.keys(i.computed.byCategory||{}).forEach(k=>s.add(k)));
+  return Array.from(s).sort((a,b)=>a.localeCompare(b));
+}
+
+function catStatusDot(instances,cat){
+  let fail=false,attn=false;
+  (instances||[]).forEach(i=>{
+    const bc=i.computed&&i.computed.byCategory;
+    if(!bc||!bc[cat])return;
+    if(bc[cat].fail>0)fail=true;
+    else if(bc[cat].attention>0)attn=true;
+  });
+  return fail?'🔴 ':attn?'🟡 ':'🟢 ';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// GAUGE VISUALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+const CIRC=2*Math.PI*56;
+
+function setGauge(avg){
+  const ring=document.getElementById('avgRing');
+  const pctEl=document.getElementById('avgPct');
+  if(!ring||!pctEl)return;
+  
+  const c=Math.max(0,Math.min(100,avg|0));
+  ring.setAttribute('stroke-dasharray',CIRC.toFixed(2));
+  ring.setAttribute('stroke-dashoffset',(CIRC*(1-c/100)).toFixed(2));
+  ring.style.stroke=colorForPct(c);
+  pctEl.textContent=c+'%';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TABLE SORTING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function makeSortable(table){
+  if(!table)return;
+  const tbody=table.querySelector('tbody');
+  const ths=table.querySelectorAll('thead th');
+  let ss={key:'',dir:'asc',idx:-1};
+  
+  ths.forEach((th,idx)=>{
+    th.addEventListener('click',()=>{
+      const key=th.dataset.key||'';
+      const dir=(ss.key===key&&ss.dir==='asc')?'desc':'asc';
+      ss={key,dir,idx};
+      
+      const rows=Array.from(tbody.querySelectorAll('tr'));
+      rows.sort((a,b)=>{
+        const ac=a.children[idx],bc=b.children[idx];
+        const av=String(ac.getAttribute('data-num')??ac.getAttribute('data-val')??"");
+        const bv=String(bc.getAttribute('data-num')??bc.getAttribute('data-val')??"");
+        let cmp=0;
+        
+        if(key==='priority'){
+          cmp=(PRIORITY_ORDER[av.toLowerCase()]||0)-(PRIORITY_ORDER[bv.toLowerCase()]||0);
+        }else if(key==='status'){
+          cmp=(STATUS_ORDER[av.toLowerCase()]||0)-(STATUS_ORDER[bv.toLowerCase()]||0);
+        }else if(ac.hasAttribute('data-num')||bc.hasAttribute('data-num')){
+          const an=parseFloat(av),bn=parseFloat(bv);
+          cmp=isNaN(an)&&isNaN(bn)?0:isNaN(an)?-1:isNaN(bn)?1:an-bn;
+        }else{
+          cmp=av.localeCompare(bv,undefined,{numeric:true,sensitivity:'base'});
+        }
+        
+        return dir==='asc'?cmp:-cmp;
+      });
+      
+      rows.forEach(r=>tbody.appendChild(r));
+      ths.forEach(h=>{const i=h.querySelector('.sort-ind');if(i)i.textContent='-';});
+      const ind=th.querySelector('.sort-ind');
+      if(ind)ind.textContent=dir==='asc'?'^':'v';
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// URL HASH NAVIGATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+function setHash(obj){
+  const parts=[];
+  if(obj&&obj.tab)parts.push('tab='+encodeURIComponent(obj.tab));
+  if(obj&&obj.instance)parts.push('instance='+encodeURIComponent(obj.instance));
+  if(obj&&obj.cat)parts.push('cat='+encodeURIComponent(obj.cat));
+  if(obj&&obj.status)parts.push('status='+encodeURIComponent(obj.status));
+  window.location.hash=parts.join('&');
+}
+
+function parseHash(){
+  const h=(window.location.hash||'').replace(/^#/,'');
+  const out={};
+  if(!h)return out;
+  h.split('&').forEach(p=>{
+    const kv=p.split('=');
+    if(kv[0])out[kv[0]]=kv.length>1?decodeURIComponent(kv.slice(1).join('=')):'';
+  });
+  return out;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+let allAnnotated=annotateAll(data.instances||[]);
+let viewAnnotated=allAnnotated;
+let activeTab='overview';
+const sharedFS={hideEntries:false,hidePass:false,hideInfo:false};
+
+const tabsEl=document.getElementById('tabs');
+const contentArea=document.getElementById('contentArea');
+
+setGeneratedTime(data.instances||[]);
+setEngineVersion(data.version||null);
+
+// ═══════════════════════════════════════════════════════════════════════════
+// KPI UPDATES
+// ═══════════════════════════════════════════════════════════════════════════
+
+function runTotals(instances){
+  const t={pass:0,attention:0,fail:0,info:0,scored:0};
+  (instances||[]).forEach(i=>{
+    const tot=i.computed&&i.computed.totals?i.computed.totals:{};
+    Object.keys(t).forEach(k=>t[k]+=(tot[k]||0));
+  });
+  return t;
+}
+
+function updateKpis(insts){
+  const n=(insts||[]).length,total=(allAnnotated||[]).length;
+  document.getElementById('instanceCount').textContent='Instances: '+n;
+  document.getElementById('scopeHint').textContent='Scope: '+n+' of '+total;
+  
+  if(!n){
+    setGauge(0);
+    document.getElementById('avgBreakdown').textContent='--';
+    document.getElementById('runTotals').innerHTML='';
+    return;
+  }
+  
+  const avg=Math.round(insts.reduce((s,i)=>s+(i.computed.score||0),0)/n);
+  setGauge(avg);
+  
+  const healthy=insts.filter(i=>(i.computed.score||0)>=80).length;
+  const warn=insts.filter(i=>{const s=i.computed.score||0;return s<80&&s>=50;}).length;
+  const bad=insts.filter(i=>(i.computed.score||0)<50).length;
+  
+  document.getElementById('avgBreakdown').textContent=
+    'Across '+n+' instance(s): '+healthy+' healthy, '+warn+' warning, '+bad+' critical';
+  
+  const t=runTotals(insts);
+  const pill=(cls,lbl,val,st)=>
+    '<span class="kpi-pill" data-status="'+st+'" title="Filter by '+lbl+
+    '" onclick="jumpToStatus(\''+st+'\')" style="cursor:pointer">'+
+    '<span class="kpi-dot '+cls+'"></span>'+lbl+': '+val+'</span>';
+  
+  document.getElementById('runTotals').innerHTML=
+    pill('pass','Pass',t.pass,'pass')+
+    pill('attention','Attn',t.attention,'attention')+
+    pill('fail','Fail',t.fail,'fail')+
+    pill('info','Info',t.info,'info');
+}
+
+// Jump from overview KPI pills to all findings filtered by status
+function jumpToStatus(st){
+  activeTab='allfindings';
+  routeTo({tab:'allfindings',status:st});
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TAB MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function buildInstJump(){
+  const sel=document.getElementById('instJumpSelect');
+  if(!sel)return;
+  const sorted=[...allAnnotated].sort((a,b)=>a.name.localeCompare(b.name));
+  sel.innerHTML=sorted.map(i=>{
+    const pct=i.computed?i.computed.score:null;
+    return'<option value="'+i.name+'">'+(pct!=null?i.name+' — '+pct+'%':i.name)+'</option>';
+  }).join('');
+  sel.onchange=()=>{if(sel.value)routeTo({tab:'instance',instance:sel.value});};
+}
+
+function renderTabs(){
+  tabsEl.innerHTML='';
+  
+  const tOv=document.createElement('div');
+  tOv.className='tab';
+  tOv.dataset.tab='overview';
+  tOv.textContent='Overview';
+  tOv.addEventListener('click',()=>{
+    activeTab='overview';
+    setActiveTab('overview');
+    routeTo({tab:'overview'});
+  });
+  tabsEl.appendChild(tOv);
+
+  const tInst=document.createElement('div');
+  tInst.className='tab';
+  tInst.dataset.tab='instance';
+  tInst.textContent='Instance';
+  tInst.addEventListener('click',()=>{
+    if(activeTab==='instance')return;
+    const first=[...allAnnotated].sort((a,b)=>a.name.localeCompare(b.name))[0];
+    if(first)routeTo({tab:'instance',instance:first.name});
+  });
+  tabsEl.appendChild(tInst);
+
+  const dropWrap=document.createElement('div');
+  dropWrap.id='instDropWrap';
+  dropWrap.style.cssText='display:none;align-items:center;gap:4px;padding:0 4px;'+
+    'border-left:1px solid var(--border);border-right:1px solid var(--border);margin:0 2px;';
+  dropWrap.innerHTML='<select class="inst-jump-select" id="instJumpSelect" '+
+    'style="max-width:180px;padding:3px 6px;font-size:12px;"></select>';
+  tabsEl.appendChild(dropWrap);
+
+  const tAll=document.createElement('div');
+  tAll.className='tab';
+  tAll.dataset.tab='allfindings';
+  tAll.textContent='All Findings';
+  tAll.addEventListener('click',()=>{
+    activeTab='allfindings';
+    setActiveTab('allfindings');
+    routeTo({tab:'allfindings'});
+  });
+  tabsEl.appendChild(tAll);
+
+  buildInstJump();
+  setActiveTab(activeTab);
+}
+
+function setActiveTab(id){
+  document.querySelectorAll('#tabs .tab').forEach(t=>t.classList.remove('active'));
+  const el=document.querySelector('#tabs .tab[data-tab="'+id+'"]');
+  if(el)el.classList.add('active');
+  const dropWrap=document.getElementById('instDropWrap');
+  if(dropWrap)dropWrap.style.display=id==='instance'?'flex':'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ROUTING
+// ═══════════════════════════════════════════════════════════════════════════
+
+function routeTo(route){
+  const tab=route.tab||activeTab||'overview';
+  activeTab=tab;
+  setActiveTab(tab);
+  
+  if(route.instance){
+    activeTab='instance';
+    setActiveTab('instance');
+    const sel=document.getElementById('instJumpSelect');
+    if(sel)sel.value=route.instance;
+    renderInstanceByName(route.instance,route.cat||null,route.status||null);
+    setHash({tab:'instance',instance:route.instance,cat:route.cat||'',status:route.status||''});
+    return;
+  }
+  
+  if(tab==='overview')renderOverview(viewAnnotated);
+  else if(tab==='allfindings')renderAllFindings(viewAnnotated,route.cat||null,route.status||null);
+  else renderOverview(viewAnnotated);
+  
+  setHash({tab,cat:route.cat||'',status:route.status||''});
+  updateKpis(viewAnnotated);
+}
+
+function openCategory(cat){
+  activeTab='allfindings';
+  routeTo({tab:'allfindings',cat});
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CATEGORY GRID (shared between Overview and All Findings)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderCategoryGrid(instances,onClickCb){
+  const cats={};
+  instances.forEach(inst=>{
+    Object.entries(inst.computed.byCategory||{}).forEach(([cat,c])=>{
+      if(!cats[cat])cats[cat]={sum:0,weight:0,pass:0,attention:0,fail:0};
+      cats[cat].sum+=c.sum;
+      cats[cat].weight+=c.weight;
+      cats[cat].pass+=c.pass;
+      cats[cat].attention+=c.attention;
+      cats[cat].fail+=c.fail;
+    });
+  });
+  
+  const grid=document.createElement('div');
+  grid.style.cssText='display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:8px;margin-top:6px;';
+  
+  Object.keys(cats).sort().forEach(cat=>{
+    const c=cats[cat];
+    const pct=c.weight>0?Math.round(c.sum/c.weight):0;
+    const col=colorForPct(pct);
+    const rgb=hexToRgb(col);
+    const tint='rgba('+rgb.r+','+rgb.g+','+rgb.b+',.08)';
+    const tintBorder='rgba('+rgb.r+','+rgb.g+','+rgb.b+',.30)';
+    
+    const card=document.createElement('div');
+    card.dataset.cat=cat;
+    card.style.cssText='background:'+tint+';border:1px solid '+tintBorder+
+      ';border-radius:12px;padding:12px 14px 10px;cursor:pointer;'+
+      'transition:transform .15s,box-shadow .15s;';
+    card.onmouseenter=()=>{
+      card.style.transform='translateY(-2px)';
+      card.style.boxShadow='0 6px 18px rgba(0,0,0,.10)';
+    };
+    card.onmouseleave=()=>{
+      card.style.transform='';
+      card.style.boxShadow='';
+    };
+    
+    const name=document.createElement('div');
+    name.style.cssText='font-size:11px;font-weight:700;color:#6b7280;letter-spacing:.04em;'+
+      'text-transform:uppercase;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    name.title=cat;
+    name.textContent=cat;
+    
+    const score=document.createElement('div');
+    score.style.cssText='font-size:26px;font-weight:900;line-height:1.1;color:'+col+';margin-bottom:6px;';
+    score.textContent=pct+'%';
+    
+    const barTrack=document.createElement('div');
+    barTrack.style.cssText='height:4px;border-radius:2px;background:rgba(0,0,0,.08);margin-bottom:8px;overflow:hidden;';
+    const barFill=document.createElement('div');
+    barFill.style.cssText='height:100%;border-radius:2px;width:'+pct+'%;background:'+col+';';
+    barTrack.appendChild(barFill);
+    
+    const counts=document.createElement('div');
+    counts.style.cssText='display:flex;gap:6px;font-size:11px;font-weight:700;flex-wrap:wrap;';
+    counts.innerHTML='<span style="color:#059669">✓&nbsp;'+c.pass+'</span>'+
+      (c.attention?'<span style="color:#d97706">⚠&nbsp;'+c.attention+'</span>':'')+
+      (c.fail?'<span style="color:#dc2626">✕&nbsp;'+c.fail+'</span>':'');
+    
+    [name,score,barTrack,counts].forEach(el=>card.appendChild(el));
+    card.addEventListener('click',()=>{if(onClickCb)onClickCb(cat,card,grid);});
+    grid.appendChild(card);
+  });
+  
+  return grid;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INSTANCE CATEGORY CHIPS (filter within instance findings table)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderCategoryChips(inst,onToggle){
+  const wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;';
+  
+  Object.keys(inst.computed.byCategory||{}).sort().forEach(cat=>{
+    const c=inst.computed.byCategory[cat];
+    const pct=c.weight>0?Math.round(c.sum/c.weight):0;
+    const col=colorForPct(pct);
+    const rgb=hexToRgb(col);
+    const tint='rgba('+rgb.r+','+rgb.g+','+rgb.b+',.09)';
+    const tintBorder='rgba('+rgb.r+','+rgb.g+','+rgb.b+',.28)';
+    
+    const chip=document.createElement('div');
+    chip.dataset.cat=cat;
+    chip.style.cssText='display:inline-flex;align-items:center;gap:7px;padding:6px 12px;'+
+      'border-radius:10px;border:1px solid '+tintBorder+';background:'+tint+';cursor:pointer;'+
+      'transition:transform .12s,box-shadow .12s;';
+    chip.onmouseenter=()=>{
+      chip.style.transform='translateY(-1px)';
+      chip.style.boxShadow='0 3px 10px rgba(0,0,0,.09)';
+    };
+    chip.onmouseleave=()=>{
+      chip.style.transform='';
+      chip.style.boxShadow='';
+    };
+    
+    const dot=document.createElement('span');
+    dot.style.cssText='width:8px;height:8px;border-radius:50%;background:'+col+';flex-shrink:0;';
+    
+    const nm=document.createElement('span');
+    nm.style.cssText='font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.03em;';
+    nm.textContent=cat;
+    
+    const sc=document.createElement('span');
+    sc.style.cssText='font-size:14px;font-weight:900;color:'+col+';';
+    sc.textContent=pct+'%';
+    
+    [dot,nm,sc].forEach(el=>chip.appendChild(el));
+    chip.addEventListener('click',()=>{if(onToggle)onToggle(cat,chip,wrap);});
+    wrap.appendChild(chip);
+  });
+  
+  return wrap;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// OVERVIEW TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderOverview(instances){
+  contentArea.innerHTML='';
+  
+  if(!instances.length){
+    contentArea.innerHTML='<div class="card">No instances configured.</div>';
+    return;
+  }
+
+  // Category grid card
+  const catCard=document.createElement('div');
+  catCard.className='card';
+  catCard.style.marginBottom='12px';
+  catCard.innerHTML='<div style="font-weight:900;margin-bottom:8px">Categories '+
+    '<span class="muted" style="font-weight:400;font-size:12px">— click any card to view its findings</span></div>';
+  catCard.appendChild(renderCategoryGrid(instances,(cat)=>openCategory(cat)));
+  contentArea.appendChild(catCard);
+
+  // Instance table
+  const cats=allCategories(instances);
+  const wrap=document.createElement('div');
+  wrap.className='card';
+
+  const fb=document.createElement('div');
+  fb.className='ov-filter-bar';
+  
+  const searchSec=document.createElement('div');
+  searchSec.className='filter-section';
+  searchSec.innerHTML='<label>Search</label>'+
+    '<input id="ovSearch" type="search" placeholder="Name or description…" style="width:180px"/>';
+  fb.appendChild(searchSec);
+
+  const div1=document.createElement('div');
+  div1.className='filter-divider';
+  fb.appendChild(div1);
+
+  const metricSec=document.createElement('div');
+  metricSec.className='filter-section';
+  metricSec.style.gap='6px';
+  metricSec.style.flexWrap='wrap';
+  const metricLabel=document.createElement('label');
+  metricLabel.textContent='Filter by';
+  metricSec.appendChild(metricLabel);
+  
+  const pillWrap=document.createElement('div');
+  pillWrap.style.cssText='display:flex;gap:4px;flex-wrap:wrap;';
+
+  let activeMetric='__OVERALL__';
+  const metricOptions=[{label:'Overall',value:'__OVERALL__'},...cats.map(c=>({label:c,value:c}))];
+  
+  metricOptions.forEach(opt=>{
+    const p=document.createElement('button');
+    p.className='metric-pill'+(opt.value===activeMetric?' active':'');
+    p.textContent=opt.label;
+    p.dataset.metric=opt.value;
+    p.addEventListener('click',()=>{
+      activeMetric=opt.value;
+      pillWrap.querySelectorAll('.metric-pill').forEach(b=>
+        b.classList.toggle('active',b.dataset.metric===activeMetric)
+      );
+      applyOv();
+    });
+    pillWrap.appendChild(p);
+  });
+  metricSec.appendChild(pillWrap);
+  fb.appendChild(metricSec);
+
+  const div2=document.createElement('div');
+  div2.className='filter-divider';
+  fb.appendChild(div2);
+  
+  const hideSec=document.createElement('div');
+  hideSec.className='filter-section';
+  hideSec.style.gap='6px';
+  hideSec.innerHTML='<label style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap">'+
+    '<input id="tblHideHealthy" type="checkbox"/> Hide above</label>'+
+    '<div style="display:flex;align-items:center;gap:3px">'+
+    '<input id="tblHealthPct" type="number" min="0" max="100" step="5" value="80" '+
+    'style="width:52px;padding:5px 6px;border:1px solid var(--border);border-radius:8px;font-size:13px;"/>'+
+    '<span style="font-size:12px;color:var(--muted);font-weight:700">%</span></div>';
+  fb.appendChild(hideSec);
+  
+  const sp=document.createElement('span');
+  sp.style.flex='1';
+  fb.appendChild(sp);
+  
+  const resetBtn=document.createElement('button');
+  resetBtn.className='btn';
+  resetBtn.textContent='Reset';
+  fb.appendChild(resetBtn);
+
+  const thead='<thead><tr>'+
+    '<th data-key="instance">Instance <span class="sort-ind">-</span></th>'+
+    '<th data-key="overall">Overall <span class="sort-ind">-</span></th>'+
+    cats.map(c=>'<th data-key="'+c+'">'+c+' <span class="sort-ind">-</span></th>').join('')+
+    '</tr></thead>';
+
+  wrap.innerHTML='<div style="font-weight:900;margin-bottom:10px">Instances</div>';
+  wrap.appendChild(fb);
+  
+  const tableWrap=document.createElement('div');
+  tableWrap.className='table-wrap';
+  const tbl=document.createElement('table');
+  tbl.id='instCatTable';
+  tbl.className='table';
+  tbl.innerHTML=thead+'<tbody id="instTbody"></tbody>';
+  tableWrap.appendChild(tbl);
+  wrap.appendChild(tableWrap);
+  contentArea.appendChild(wrap);
+
+  const tbody=tbl.querySelector('#instTbody');
+  const ovSearch=wrap.querySelector('#ovSearch');
+  const hideHealthy=wrap.querySelector('#tblHideHealthy');
+  const healthPct=wrap.querySelector('#tblHealthPct');
+
+  function instRowHTML(inst){
+    const bc=inst.computed.byCategory||{};
+    const cells=cats.map(cat=>{
+      const pct=bc[cat]!=null?bc[cat].pct:null;
+      return'<td'+(pct!=null&&!isNaN(pct)?' data-num="'+pct+'"':'')+'>'+heatCellHTML(pct,true)+'</td>';
+    }).join('');
+    const ov=inst.computed.score||0;
+    const bg=colorForPct(ov);
+    const fg=textOn(bg);
+    return'<tr>'+
+      '<td data-val="'+inst.name.toLowerCase()+'">'+
+      '<a href="#" class="inst-link" data-name="'+inst.name+'" onclick="return openInstance(this.dataset.name)">'+
+      inst.name+'</a></td>'+
+      '<td data-num="'+ov+'"><span class="heat-sm" style="background:'+bg+';color:'+fg+'">'+ov+'%</span></td>'+
+      cells+'</tr>';
+  }
+
+  function applyOv(){
+    const q=(ovSearch.value||'').trim().toLowerCase();
+    const doHide=hideHealthy.checked;
+    const threshold=Math.max(0,Math.min(100,parseFloat(healthPct.value)||80));
+    
+    const filtered=instances.filter(inst=>{
+      if(q&&!inst.name.toLowerCase().includes(q)&&!String(inst.description||'').toLowerCase().includes(q))
+        return false;
+      if(doHide){
+        const pct=activeMetric==='__OVERALL__'?
+          (inst.computed.score||0):
+          (inst.computed.byCategory&&inst.computed.byCategory[activeMetric]!=null?
+            inst.computed.byCategory[activeMetric].pct:null);
+        if(pct!=null&&pct>=threshold)return false;
+      }
+      return true;
+    });
+    
+    tbody.innerHTML=filtered.map(instRowHTML).join('');
+    makeSortable(tbl);
+    viewAnnotated=filtered;
+    updateKpis(viewAnnotated);
+  }
+
+  applyOv();
+  ovSearch.addEventListener('input',applyOv);
+  hideHealthy.addEventListener('change',applyOv);
+  healthPct.addEventListener('input',applyOv);
+  
+  resetBtn.addEventListener('click',()=>{
+    ovSearch.value='';
+    hideHealthy.checked=false;
+    healthPct.value='80';
+    activeMetric='__OVERALL__';
+    pillWrap.querySelectorAll('.metric-pill').forEach(b=>
+      b.classList.toggle('active',b.dataset.metric==='__OVERALL__')
+    );
+    viewAnnotated=instances;
+    applyOv();
+  });
+  
+  makeSortable(tbl);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INSTANCE TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+function openInstance(name){
+  if(!name)return false;
+  routeTo({tab:'instance',instance:name});
+  return false;
+}
+
+function renderInstanceByName(name,presetCat,presetStatus){
+  const inst=allAnnotated.find(i=>i.name===name);
+  if(!inst){
+    alert('Instance not found');
+    return;
+  }
+  renderInstance(inst,presetCat||null,presetStatus||null);
+}
+
+function renderInstance(inst,presetCat,presetStatus){
+  contentArea.innerHTML='';
+  const t=inst.computed.totals||{};
+
+  // Summary card
+  const sum=document.createElement('div');
+  sum.className='card';
+  sum.style.marginBottom='12px';
+  
+  const pillClick=(st)=>'onclick="instJumpStatus(\''+st+'\')"';
+  sum.innerHTML='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:8px">'+
+    '<div><div style="font-weight:900;font-size:15px">'+inst.name+'</div></div>'+
+    '<div style="display:flex;align-items:center;gap:10px">'+heatCellHTML(inst.computed.score||0,false)+
+    '<div class="muted" style="font-size:12px">Checked: '+
+    (inst.lastCheck?new Date(inst.lastCheck).toLocaleString():'n/a')+'</div></div>'+
+    '</div>'+
+    '<div class="kpi-row" id="instKpiRow">'+
+    '<span class="kpi-pill" '+pillClick('pass')+' title="Show Pass only">'+
+    '<span class="kpi-dot pass"></span>Pass: '+(t.pass||0)+'</span>'+
+    '<span class="kpi-pill" '+pillClick('attention')+' title="Show Attn only">'+
+    '<span class="kpi-dot attention"></span>Attn: '+(t.attention||0)+'</span>'+
+    '<span class="kpi-pill" '+pillClick('fail')+' title="Show Fail only">'+
+    '<span class="kpi-dot fail"></span>Fail: '+(t.fail||0)+'</span>'+
+    '<span class="kpi-pill" '+pillClick('info')+' title="Show Info only">'+
+    '<span class="kpi-dot info"></span>Info: '+(t.info||0)+'</span>'+
+    '</div>';
+  contentArea.appendChild(sum);
+
+  // Category chips card
+  const catCard=document.createElement('div');
+  catCard.className='card';
+  catCard.style.marginBottom='12px';
+  catCard.innerHTML='<div style="font-weight:700;font-size:12px;color:var(--muted);'+
+    'text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px">'+
+    'Categories — click to filter findings</div>';
+
+  let _setCatFilter=null;
+  let _setStatFilter=null;
+  let _activeCat=presetCat||null;
+
+  const chips=renderCategoryChips(inst,(cat,chipEl,wrapEl)=>{
+    if(_activeCat===cat){
+      _activeCat=null;
+      wrapEl.querySelectorAll('[data-cat]').forEach(c=>c.classList.remove('cat-chip-selected'));
+    }else{
+      _activeCat=cat;
+      wrapEl.querySelectorAll('[data-cat]').forEach(c=>c.classList.remove('cat-chip-selected'));
+      chipEl.classList.add('cat-chip-selected');
+    }
+    if(_setCatFilter)_setCatFilter(_activeCat);
+  });
+
+  if(presetCat){
+    const preChip=chips.querySelector('[data-cat="'+presetCat+'"]');
+    if(preChip)preChip.classList.add('cat-chip-selected');
+  }
+
+  catCard.appendChild(chips);
+  contentArea.appendChild(catCard);
+
+  const result=renderFindingsTableInto(contentArea,[inst],{showInstanceColumn:false},_activeCat,presetStatus);
+  _setCatFilter=result.setCatFilter;
+  _setStatFilter=result.setStatFilter;
+
+  // Wire up KPI pill clicks on instance tab
+  window.instJumpStatus=function(st){
+    _activeCat=null;
+    chips.querySelectorAll('[data-cat]').forEach(c=>c.classList.remove('cat-chip-selected'));
+    if(_setCatFilter)_setCatFilter(null);
+    if(_setStatFilter)_setStatFilter(st);
+    sum.querySelectorAll('.kpi-pill').forEach(p=>p.classList.remove('active-filter'));
+    const clicked=sum.querySelector('.kpi-pill[onclick*="\''+st+'\'"]');
+    if(clicked)clicked.classList.add('active-filter');
+  };
+
+  updateKpis(viewAnnotated);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FINDINGS TABLE (shared between Instance and All Findings tabs)
+// ═══════════════════════════════════════════════════════════════════════════
+
+function makePill(id,label,icon,initActive){
+  const el=document.createElement('span');
+  el.className='toggle-pill'+(initActive?' active':'');
+  el.id=id;
+  el.innerHTML='<span class="pill-icon">'+icon+'</span>'+label;
+  return el;
+}
+
+function renderFindingsTableInto(containerEl,instances,opts,presetCat,presetStatus){
+  const showInst=!!(opts||{}).showInstanceColumn;
+  const allRows=[];
+  
+  (instances||[]).forEach(inst=>{
+    (inst.checks||[]).forEach(ch=>{
+      const st=String(ch.status||'fail').toLowerCase();
+      const lbl=ch.label||ch.key||'';
+      allRows.push({
+        instance:inst.name,
+        category:ch.category||'Uncategorized',
+        label:lbl,
+        source:ch.source||'',
+        spoke:ch.spoke||'',
+        priority:ch.priority||'',
+        status:st,
+        details:ch.details||'',
+        isEntry:isEntryCheck(lbl)
+      });
+    });
+  });
+
+  const spokes=Array.from(new Set(allRows.map(r=>r.spoke).filter(Boolean))).sort();
+  const categories=Array.from(new Set(allRows.map(r=>r.category))).sort((a,b)=>a.localeCompare(b));
+  const priorities=Array.from(new Set(allRows.map(r=>r.priority).filter(Boolean))).sort();
+  const statuses=['pass','attention','fail','info'];
+
+  const stickyEl=document.createElement('div');
+  stickyEl.className='findings-sticky';
+
+  // Quick filters row
+  const qRow=document.createElement('div');
+  qRow.className='quick-row';
+  qRow.innerHTML='<span class="qlabel">Quick filters:</span>';
+  
+  const qFail=document.createElement('button');
+  qFail.className='btn danger';
+  qFail.innerHTML='⛔ Failures only';
+  
+  const qAttn=document.createElement('button');
+  qAttn.className='btn warn-btn';
+  qAttn.innerHTML='⚠️ Attn &amp; Failures';
+  
+  const qInfo=document.createElement('button');
+  qInfo.className='btn info-btn';
+  qInfo.innerHTML='ℹ️ Info only';
+  
+  const qAll=document.createElement('button');
+  qAll.className='btn secondary';
+  qAll.innerHTML='Show all';
+  
+  const countBadge=document.createElement('span');
+  countBadge.className='row-count';
+  countBadge.innerHTML='<span id="fRowCount">0</span> of <span id="fRowTotal">'+allRows.length+'</span> findings';
+  
+  const spacer=document.createElement('span');
+  spacer.className='spacer';
+  
+  [qFail,qAttn,qInfo,qAll,spacer,countBadge].forEach(el=>qRow.appendChild(el));
+  stickyEl.appendChild(qRow);
+
+  // Advanced filters bar
+  const fb=document.createElement('div');
+  fb.className='filter-bar';
+  
+  const mkSel=(id,lbl,opts_)=>{
+    const sec=document.createElement('div');
+    sec.className='filter-section';
+    sec.innerHTML='<label>'+lbl+'</label><select id="'+id+'"><option value="">All</option>'+opts_+'</select>';
+    return sec;
+  };
+  
+  fb.appendChild(mkSel('fCat','Category',
+    categories.map(c=>'<option value="'+c+'">'+catStatusDot(instances,c)+c+'</option>').join('')
+  ));
+  fb.appendChild(mkSel('fSpoke','Spoke',
+    spokes.map(s=>'<option value="'+s+'">'+formatSpoke(s)+'</option>').join('')
+  ));
+  fb.appendChild(mkSel('fPrio','Priority',
+    priorities.map(p=>'<option value="'+p+'">'+p+'</option>').join('')
+  ));
+  fb.appendChild(mkSel('fStat','Status',
+    statuses.map(s=>'<option value="'+s+'">'+(STATUS_LABEL[s]||s)+'</option>').join('')
+  ));
+  
+  const lblSec=document.createElement('div');
+  lblSec.className='filter-section';
+  lblSec.innerHTML='<label>Label</label><input id="fLabel" type="search" placeholder="Search label…" style="width:140px"/>';
+  fb.appendChild(lblSec);
+  
+  const srcSec=document.createElement('div');
+  srcSec.className='filter-section';
+  srcSec.innerHTML='<label>Function</label><input id="fSrc" type="search" placeholder="e.g. Get-Dba*" style="width:130px"/>';
+  fb.appendChild(srcSec);
+  
+  const fdiv=document.createElement('div');
+  fdiv.className='filter-divider';
+  fb.appendChild(fdiv);
+  
+  const tg=document.createElement('div');
+  tg.className='toggle-group';
+  const tgLbl=document.createElement('span');
+  tgLbl.className='toggle-group-label';
+  tgLbl.textContent='Hide:';
+  tg.appendChild(tgLbl);
+  
+  const pillPass=makePill('fHidePass','Pass','✅',sharedFS.hidePass);
+  const pillInfo=makePill('fHideInfo','Info','ℹ️',sharedFS.hideInfo);
+  const pillEnt=makePill('fHideEnt','Entries','📋',sharedFS.hideEntries);
+  
+  [pillPass,pillInfo,pillEnt].forEach(p=>tg.appendChild(p));
+  fb.appendChild(tg);
+  
+  const sp2=document.createElement('span');
+  sp2.className='spacer';
+  fb.appendChild(sp2);
+  
+  const resetBtn=document.createElement('button');
+  resetBtn.className='btn';
+  resetBtn.textContent='Reset';
+  fb.appendChild(resetBtn);
+  
+  stickyEl.appendChild(fb);
+  containerEl.appendChild(stickyEl);
+
+  // Findings table
+  const tableCard=document.createElement('div');
+  tableCard.className='card';
+  tableCard.style.padding='0';
+  
+  const tableWrapDiv=document.createElement('div');
+  tableWrapDiv.className='findings-table-wrap '+(showInst?'show-inst':'hide-inst');
+  tableWrapDiv.style.cssText='border-radius:12px;';
+  tableCard.appendChild(tableWrapDiv);
+  
+  tableWrapDiv.innerHTML='<table id="fTable" class="table"><thead><tr>'+
+    (showInst?'<th data-key="instance">Instance <span class="sort-ind">-</span></th>':'')+
+    '<th data-key="category">Category <span class="sort-ind">-</span></th>'+
+    '<th data-key="label">Label <span class="sort-ind">-</span></th>'+
+    '<th data-key="source">dbatools Function <span class="sort-ind">-</span></th>'+
+    '<th data-key="spoke">Spoke <span class="sort-ind">-</span></th>'+
+    '<th data-key="priority">Priority <span class="sort-ind">-</span></th>'+
+    '<th data-key="status">Status <span class="sort-ind">-</span></th>'+
+    '<th data-key="details">Details <span class="sort-ind">-</span></th>'+
+    '</tr></thead><tbody id="fBody"></tbody></table>';
+  containerEl.appendChild(tableCard);
+
+  const fCat=fb.querySelector('#fCat');
+  const fSpoke=fb.querySelector('#fSpoke');
+  const fPrio=fb.querySelector('#fPrio');
+  const fStat=fb.querySelector('#fStat');
+  const fLabel=fb.querySelector('#fLabel');
+  const fSrc=fb.querySelector('#fSrc');
+  const fRowCount=stickyEl.querySelector('#fRowCount');
+  const fTable=tableWrapDiv.querySelector('#fTable');
+  const fBody=tableWrapDiv.querySelector('#fBody');
+
+  // Apply presets
+  if(presetCat&&fCat){
+    const opt=Array.from(fCat.options).find(o=>o.value===presetCat);
+    if(opt)fCat.value=presetCat;
+  }
+  if(presetStatus&&fStat){
+    const opt=Array.from(fStat.options).find(o=>o.value===presetStatus);
+    if(opt)fStat.value=presetStatus;
+  }
+
+  let state={hidePass:sharedFS.hidePass,hideInfo:sharedFS.hideInfo,hideEntries:sharedFS.hideEntries};
+  
+  function syncPills(){
+    pillPass.classList.toggle('active',state.hidePass);
+    pillInfo.classList.toggle('active',state.hideInfo);
+    pillEnt.classList.toggle('active',state.hideEntries);
+  }
+  syncPills();
+  
+  pillPass.addEventListener('click',()=>{state.hidePass=!state.hidePass;apply();});
+  pillInfo.addEventListener('click',()=>{state.hideInfo=!state.hideInfo;apply();});
+  pillEnt.addEventListener('click',()=>{state.hideEntries=!state.hideEntries;apply();});
+
+  function rowHTML(r){
+    const cls=r.status==='fail'?'row-fail':
+              r.status==='attention'?'row-attention':
+              r.status==='info'?'row-info':'';
+    const tag=r.isEntry?
+      '<span style="font-size:10px;background:#e5e7eb;border-radius:4px;padding:1px 5px;'+
+      'margin-left:4px;color:#6b7280;font-weight:700">ENTRY</span>':'';
+    const spokeDisplay=formatSpoke(r.spoke);
+    
+    return'<tr class="'+cls+'">'+
+      (showInst?'<td data-val="'+r.instance.toLowerCase()+'">'+
+        '<a href="#" class="inst-link" data-name="'+r.instance+'" '+
+        'onclick="return openInstance(this.dataset.name)">'+r.instance+'</a></td>':'')+
+      '<td data-val="'+r.category.toLowerCase()+'">'+r.category+'</td>'+
+      '<td data-val="'+r.label.toLowerCase()+'"><strong>'+r.label+'</strong>'+tag+'</td>'+
+      '<td data-val="'+(r.source||'').toLowerCase()+'">'+(r.source||'')+'</td>'+
+      '<td data-val="'+spokeDisplay.toLowerCase()+'">'+spokeDisplay+'</td>'+
+      '<td data-val="'+(r.priority||'').toLowerCase()+'">'+(r.priority||'')+'</td>'+
+      '<td data-val="'+r.status+'">'+chipHTML(r.status)+'</td>'+
+      '<td>'+(r.details||'')+'</td>'+
+      '</tr>';
+  }
+
+  function syncQuick(){
+    const sv=fStat.value,hp=state.hidePass,hi=state.hideInfo;
+    qFail.classList.toggle('active-filter', sv==='fail');
+    qAttn.classList.toggle('active-filter', sv==='' && hp && hi);
+    qInfo.classList.toggle('active-filter', sv==='info');
+    qAll.classList.toggle('active-filter',  sv==='' && !hp && !hi);
+  }
+
+  function apply(){
+    sharedFS.hidePass=state.hidePass;
+    sharedFS.hideInfo=state.hideInfo;
+    sharedFS.hideEntries=state.hideEntries;
+    syncPills();
+    
+    const cat=fCat.value;
+    const spoke=fSpoke?fSpoke.value:'';
+    const pr=fPrio.value;
+    const st=fStat.value;
+    const ql=(fLabel.value||'').trim().toLowerCase();
+    const qs=(fSrc.value||'').trim().toLowerCase();
+    
+    const filtered=allRows.filter(r=>{
+      if(cat&&r.category!==cat)return false;
+      if(spoke&&r.spoke!==spoke)return false;
+      if(pr&&r.priority!==pr)return false;
+      if(st&&r.status!==st)return false;
+      if(state.hidePass&&r.status==='pass')return false;
+      if(state.hideInfo&&r.status==='info')return false;
+      if(state.hideEntries&&r.isEntry)return false;
+      if(ql&&!r.label.toLowerCase().includes(ql))return false;
+      if(qs&&!(r.source||'').toLowerCase().includes(qs))return false;
+      return true;
+    });
+    
+    fBody.innerHTML=filtered.map(rowHTML).join('');
+    fRowCount.textContent=filtered.length;
+    makeSortable(fTable);
+    syncQuick();
+  }
+
+  qFail.addEventListener('click',()=>{
+    fStat.value='fail';
+    state.hidePass=true;
+    state.hideInfo=true;
+    apply();
+  });
+ qAttn.addEventListener('click',()=>{
+    fStat.value='';
+    state.hidePass=true;
+    state.hideInfo=true;   
+    apply();
+  });
+  qInfo.addEventListener('click',()=>{
+    fStat.value='info';
+    state.hidePass=true;
+    state.hideInfo=false;
+    apply();
+  });
+  qAll.addEventListener('click',()=>{
+    fStat.value='';
+    state.hidePass=false;
+    state.hideInfo=false;
+    apply();
+  });
+  
+  [fCat,fSpoke,fPrio,fStat].forEach(el=>el.addEventListener('change',apply));
+  [fLabel,fSrc].forEach(el=>el.addEventListener('input',apply));
+  
+  let _onResetCb=null;
+
+  resetBtn.addEventListener('click',()=>{
+    fCat.value='';
+    if(fSpoke)fSpoke.value='';
+    fPrio.value='';
+    fStat.value='';
+    fLabel.value='';
+    fSrc.value='';
+    state={hidePass:false,hideInfo:false,hideEntries:false};
+    apply();
+    if(_onResetCb)_onResetCb();
+  });
+
+  apply();
+
+  return{
+    setCatFilter:function(cat){fCat.value=cat||'';apply();},
+    setStatFilter:function(st){fStat.value=st||'';apply();},
+    setOnReset:function(cb){_onResetCb=cb;}
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// ALL FINDINGS TAB
+// ═══════════════════════════════════════════════════════════════════════════
+
+function renderAllFindings(instances, presetCat, presetStatus) {
+  contentArea.innerHTML = '';
+
+  // Category cards that filter the table below
+  const catCard = document.createElement('div');
+  catCard.className = 'card';
+  catCard.style.marginBottom = '12px';
+  catCard.innerHTML = '<div style="font-weight:900;margin-bottom:8px">Categories ' +
+    '<span class="muted" style="font-weight:400;font-size:12px">— click to filter findings below</span></div>';
+
+  let _setCatFilter = null;
+  let _activeCatCard = null;
+
+  const grid = renderCategoryGrid(instances, (cat, cardEl, gridEl) => {
+    if (_activeCatCard === cat) {
+      _activeCatCard = null;
+      gridEl.querySelectorAll('[data-cat]').forEach(c => c.style.outline = '');
+      if (_setCatFilter) _setCatFilter(null);
+    } else {
+      _activeCatCard = cat;
+      gridEl.querySelectorAll('[data-cat]').forEach(c => c.style.outline = '');
+      cardEl.style.outline = '3px solid var(--accent)';
+      cardEl.style.outlineOffset = '2px';
+      if (_setCatFilter) _setCatFilter(cat);
+    }
+  });
+
+  if (presetCat) {
+    _activeCatCard = presetCat;
+  }
+
+  catCard.appendChild(grid);
+  contentArea.appendChild(catCard);
+
+  const result = renderFindingsTableInto(
+    contentArea,
+    instances,                          // was [inst] — inst is undefined here
+    { showInstanceColumn: true },        // show instance column in the all-findings view
+    _activeCatCard,                      // was _activeCat (undefined)
+    presetStatus
+  );
+
+  _setCatFilter = result.setCatFilter;
+
+  // Highlight preset card if any
+  if (presetCat) {
+    const preCard = grid.querySelector('[data-cat="' + presetCat + '"]');
+    if (preCard) {
+      preCard.style.outline = '3px solid var(--accent)';
+      preCard.style.outlineOffset = '2px';
+    }
+  }
+
+  // Clear the active card highlight when the filter is reset
+  result.setOnReset(() => {
+    _activeCatCard = null;
+    grid.querySelectorAll('[data-cat]').forEach(c => c.style.outline = '');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// IMPORT / EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function normalizeImported(json){
+  const src=Array.isArray(json)?json:(json&&Array.isArray(json.instances)?json.instances:null);
+  if(!src)throw new Error('Expected an array of instances or {instances:[...]}.');
+  
+  const ns=v=>{
+    if(typeof v==='boolean')return v?'pass':'fail';
+    const s=String(v||'').trim().toLowerCase();
+    if(s==='pass')return'pass';
+    if(['needs attention','attention','attn','warn','warning'].includes(s))return'attention';
+    if(['fail','failed'].includes(s))return'fail';
+    if(['info','informational'].includes(s))return'info';
+    return'fail';
+  };
+  
+  const nc=ch=>({
+    label:ch.label??ch.key??'',
+    source:ch.source||'',
+    spoke:ch.spoke||'',
+    key:ch.key??'',
+    category:ch.category||'Uncategorized',
+    priority:String(ch.status||'').toLowerCase()==='info'?null:(ch.priority||''),
+    status:ns(ch.status),
+    details:ch.details||'',
+    weight:Number.isFinite(+ch.weight)?+ch.weight:10
+  });
+  
+  return{
+    version:json.version||null,
+    instances:src.map((inst,idx)=>{
+      if(!inst||typeof inst!=='object')
+        throw new Error('Instance at index '+idx+' is not an object.');
+      if(!inst.name||typeof inst.name!=='string')
+        throw new Error('Instance at index '+idx+' missing valid "name".');
+      return{
+        name:inst.name,
+        description:inst.description||'',
+        lastCheck:inst.lastCheck||null,
+        checks:Array.isArray(inst.checks)?inst.checks.map(nc):[]
+      };
+    })
+  };
+}
+
+(function(){
+  const importBtn=document.getElementById('importBtn');
+  const exportBtn=document.getElementById('exportBtn');
+  const fileInput=document.getElementById('fileInput');
+  
+  if(importBtn&&fileInput){
+    importBtn.addEventListener('click',()=>fileInput.click());
+    fileInput.addEventListener('change',e=>{
+      const f=e.target.files&&e.target.files[0];
+      if(!f)return;
+      const reader=new FileReader();
+      reader.onload=ev=>{
+        try{
+          const norm=normalizeImported(JSON.parse(ev.target.result));
+          data.instances=norm.instances;
+          data.version=norm.version||data.version;
+          allAnnotated=annotateAll(data.instances);
+          viewAnnotated=allAnnotated;
+          setGeneratedTime(data.instances);
+          setEngineVersion(data.version);
+          activeTab='overview';
+          renderTabs();
+          routeTo({tab:'overview'});
+          fileInput.value='';
+        }catch(err){
+          alert('Import failed: '+((err&&err.message)?err.message:String(err)));
+        }
+      };
+      reader.onerror=()=>alert('Could not read file.');
+      reader.readAsText(f);
+    });
+  }
+  
+  if(exportBtn){
+    exportBtn.addEventListener('click',()=>{
+      try{
+        const payload=JSON.stringify({
+          version:data.version||'1.0.0',
+          instances:data.instances||[]
+        },null,2);
+        const blob=new Blob([payload],{type:'application/json'});
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(blob);
+        a.download='findings.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(()=>URL.revokeObjectURL(a.href),3000);
+      }catch(err){
+        alert('Export failed: '+((err&&err.message)?err.message:String(err)));
+      }
+    });
+  }
+  
+  const exportXlsBtn=document.getElementById('exportXlsBtn');
+  if(exportXlsBtn)exportXlsBtn.addEventListener('click',exportWorkbook);
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EXCEL EXPORT
+// ═══════════════════════════════════════════════════════════════════════════
+
+function exportWorkbook(){
+  if(!window.XLSX){
+    const s=document.createElement('script');
+    s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+    s.onload=exportWorkbook;
+    document.head.appendChild(s);
+    return;
+  }
+  
+  const XLSX=window.XLSX;
+  const wb=XLSX.utils.book_new();
+  const cats=allCategories(allAnnotated);
+  
+  // Overview sheet
+  const ovHeaders=['Instance','Environment','Last Check','Overall %',...cats];
+  const ovRows=allAnnotated.map(inst=>{
+    const bc=inst.computed.byCategory||{};
+    return[
+      inst.name,
+      inst._env||'',
+      inst.lastCheck?new Date(inst.lastCheck).toLocaleString():'',
+      (inst.computed.score||0)+'%',
+      ...cats.map(c=>bc[c]!=null?bc[c].pct+'%':'n/a')
+    ];
+  });
+  const ovSheet=XLSX.utils.aoa_to_sheet([ovHeaders,...ovRows]);
+  ovSheet['!cols']=[{wch:28},{wch:12},{wch:22},{wch:12},...cats.map(()=>({wch:16}))];
+  ovSheet['!freeze']={xSplit:0,ySplit:1};
+  XLSX.utils.book_append_sheet(wb,ovSheet,'Instances Overview');
+  
+  // All findings sheet
+  const fHeaders=['Instance','Category','Label','dbatools Function','Spoke','Priority','Status','Details'];
+  const fRows=[];
+  allAnnotated.forEach(inst=>{
+    (inst.checks||[]).forEach(ch=>{
+      fRows.push([
+        inst.name,
+        ch.category||'Uncategorized',
+        ch.label||ch.key||'',
+        ch.source||'',
+        formatSpoke(ch.spoke||''),
+        ch.priority||'',
+        STATUS_LABEL[String(ch.status||'').toLowerCase()]||ch.status||'',
+        ch.details||''
+      ]);
+    });
+  });
+  const fSheet=XLSX.utils.aoa_to_sheet([fHeaders,...fRows]);
+  fSheet['!cols']=[{wch:24},{wch:16},{wch:32},{wch:28},{wch:16},{wch:10},{wch:10},{wch:80}];
+  fSheet['!freeze']={xSplit:0,ySplit:1};
+  XLSX.utils.book_append_sheet(wb,fSheet,'All Findings');
+  
+  const timestamp=new Date().toISOString().slice(0,10);
+  const version=data.version?'_v'+data.version.replace(/\./g,'-'):'';
+  XLSX.writeFile(wb,'SqlHealthReport'+version+'_'+timestamp+'.xlsx');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// HELP MODAL
+// ═══════════════════════════════════════════════════════════════════════════
+
+(function(){
+  const modal=document.getElementById('helpModal');
+  const helpBtn=document.getElementById('helpBtn');
+  const closeBtn=document.getElementById('closeHelp');
+  
+  if(helpBtn&&modal){
+    helpBtn.addEventListener('click',()=>modal.classList.add('active'));
+  }
+  
+  if(closeBtn&&modal){
+    closeBtn.addEventListener('click',()=>modal.classList.remove('active'));
+  }
+  
+  if(modal){
+    modal.addEventListener('click',e=>{
+      if(e.target===modal)modal.classList.remove('active');
+    });
+  }
+  
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&modal&&modal.classList.contains('active')){
+      modal.classList.remove('active');
+    }
+  });
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// INITIALIZATION
+// ═══════════════════════════════════════════════════════════════════════════
+
+renderTabs();
+updateKpis(viewAnnotated);
+
+(function(){
+  const h=parseHash();
+  if(h&&h.instance){
+    routeTo({tab:'instance',instance:h.instance,cat:h.cat||'',status:h.status||''});
+    return;
+  }
+  routeTo({tab:h.tab||'overview',cat:h.cat||'',status:h.status||''});
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260319175453
+Username: LAB\da
+RunAs User: LAB\da
+Configuration Name: 
+Machine: LABDC (Microsoft Windows NT 10.0.20348.0)
+Host Application: C:\Windows\system32\WindowsPowerShell\v1.0\PowerShell_ISE.exe
+Process ID: 8700
+PSVersion: 5.1.20348.1366
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.20348.1366
+BuildVersion: 10.0.20348.1366
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+
+|=============================================================|
+|     SQL Health Suite  -  Checkup Engine / Orchestrator      |
+|=============================================================|
+  Version      : 1.0.0
+  Run started  : 2026-03-19 17:54:53
+  Findings     : C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Json-Findings\Findings_2026.03.19_17.54.json
+  Transcript   : C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Run-Transcripts\Transcript_2026.03.19_17.54.txt
+
+
+----------------------------------------------------------------------
+  STEP 0 - Prerequisites
+----------------------------------------------------------------------
+  [+] dbatools 2.7.25 installed
+  [+] dbatools module loaded
+  [+] Fetch progress system initialized
+
+----------------------------------------------------------------------
+  STEP 1 - Settings
+----------------------------------------------------------------------
+  Overwriting settings.json at C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\settings.json
+
+----------------------------------------------------------------------
+  STEP 2 - Build Targets
+----------------------------------------------------------------------
+  Using existing targets.json: C:\Users\DA\Desktop\40 - Checkup Via DBAtools\targets.json
+  3 target(s) ready:
+    * labsql1\express
+    * labsql1
+    * labsql3
+
+----------------------------------------------------------------------
+  STEP 3 - Discover Spokes
+----------------------------------------------------------------------
+  1 spoke(s) discovered:
+    * Spoke.Database.ps1
+
+----------------------------------------------------------------------
+  STEP 4 - Execute Checks
+----------------------------------------------------------------------
+
+  |-- Target: labsql1\express
+  |   Description : Future
+  |   Credential  : Windows Integrated
+  |   [TEST] Testing connectivity (timeout: 10s) ...
+PS>TerminatingError(Connect-DbaInstance): "A parameter cannot be found that matches parameter name 'EnableException'."
+ OK
+  |++|-- Spoke.Database.ps1
+  |  |   [-] Fetching Data ...
+
+  |  |   [-] Fetching database list ...
+
+  |  |   [-] Identifying eligible databases ...
+
+  |  |   [-] Fetching system database data ...
+
+  |  |   [-] Checking compatibility levels ...
+
+  |  |   [-] Measuring VLF counts ...
+
+  |  |   [-] Testing collation match ...
+
+  |  |   [-] Testing MAXDOP ...
+
+  |  |   [-] Reading Default Trace growth events ...
+
+  |  |   [-] Fetching database space usage ...
+
+  |  |   [-] Fetching database file layout ...
+
+  |  |   [-] Summarizing database scope ...
+
+  |  |   [DONE] Summarizing database scope  [2m 6.6s]
+  |==|   31 checks: 75 findings (Pass 27 - Attn 3 - Fail 18 - Info 27) - 2m 6.9s
+  |--- Target complete: 75 findings (Pass 27 - Attn 3 - Fail 18 - Info 27)  [2m 6.9s]
+
+  |-- Target: labsql1
+  |   Description : Future
+  |   Credential  : Windows Integrated
+  |   [TEST] Testing connectivity (timeout: 10s) ...
+PS>TerminatingError(Connect-DbaInstance): "A parameter cannot be found that matches parameter name 'EnableException'."
+ OK
+  |++|-- Spoke.Database.ps1
+  |  |   [-] Fetching Data ...
+
+  |  |   [-] Fetching database list ...
+
+  |  |   [-] Identifying eligible databases ...
+
+  |  |   [-] Fetching system database data ...
+
+  |  |   [-] Checking compatibility levels ...
+
+  |  |   [-] Measuring VLF counts ...
+
+  |  |   [-] Testing collation match ...
+
+  |  |   [-] Testing MAXDOP ...
+
+  |  |   [-] Reading Default Trace growth events ...
+
+  |  |   [-] Fetching database space usage ...
+
+  |  |   [-] Fetching database file layout ...
+PS>TerminatingError(): "System error."
+PS>TerminatingError(): "System error."
+
+  |  |   [-] Summarizing database scope ...
+
+  |  |   [DONE] Summarizing database scope  [8m 25.5s]
+  |==|   31 checks: 204 findings (Pass 35 - Attn 22 - Fail 84 - Info 63) - 8m 25.9s
+  |--- Target complete: 204 findings (Pass 35 - Attn 22 - Fail 84 - Info 63)  [8m 26.0s]
+
+  |-- Target: labsql3
+  |   Description : Future
+  |   Credential  : Windows Integrated
+  |   [TEST] Testing connectivity (timeout: 10s) ...
+PS>TerminatingError(Connect-DbaInstance): "A parameter cannot be found that matches parameter name 'EnableException'."
+ OK
+  |++|-- Spoke.Database.ps1
+  |  |   [-] Fetching Data ...
+
+  |  |   [-] Fetching database list ...
+
+  |  |   [-] Identifying eligible databases ...
+
+  |  |   [-] Fetching system database data ...
+
+  |  |   [-] Checking compatibility levels ...
+
+  |  |   [-] Measuring VLF counts ...
+
+  |  |   [-] Testing collation match ...
+
+  |  |   [-] Testing MAXDOP ...
+
+  |  |   [-] Reading Default Trace growth events ...
+
+  |  |   [-] Fetching database space usage ...
+
+  |  |   [-] Fetching database file layout ...
+
+  |  |   [-] Summarizing database scope ...
+
+  |  |   [DONE] Summarizing database scope  [1m 4.9s]
+  |==|   31 checks: 57 findings (Pass 20 - Attn 1 - Fail 17 - Info 19) - 1m 5.1s
+  |--- Target complete: 57 findings (Pass 20 - Attn 1 - Fail 17 - Info 19)  [1m 5.1s]
+
+----------------------------------------------------------------------
+  STEP 5 - Persist Findings
+----------------------------------------------------------------------
+
+----------------------------------------------------------------------
+  STEP 6 - Build HTML Report
+----------------------------------------------------------------------
+
+=== Building HTML Health Report ===
+Template:   C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Report.Template.html
+JSON Data:  C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Json-Findings\Findings_2026.03.19_17.54.json
+Output:     C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Reports\Report_20260319_180642.html
+Retention:  Keep last 5 report(s)
+
+[+] Report generated successfully.
+  Path: C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Reports\Report_20260319_180642.html
+  Size: 342.3 KB
+
+
+----------------------------------------------------------------------
+  STEP 7 - Housekeeping
+----------------------------------------------------------------------
+  Pruned 1 old artifact(s) (retention: 5)
+
+======================================================================
+  RUN COMPLETE
+======================================================================
+
+  Suite Version    : 1.0.0
+  Targets checked  : 3
+  Spokes executed  : 1
+  Total findings   : 336
+    [+]  Pass      : 82
+    [!]  Attention : 26
+    [x]  Fail      : 119
+    [?]  Info      : 109
+  Elapsed          : 12m 49.0s
+
+  ARTIFACTS:
+    Transcript   : C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Run-Transcripts\Transcript_2026.03.19_17.54.txt
+    Findings JSON: C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Json-Findings\Findings_2026.03.19_17.54.json
+    HTML Report  : C:\Users\DA\Desktop\40 - Checkup Via DBAtools\4. Output\Reports\Report_20260319_180642.html
+
+  Pruned 1 old artifact(s):
+    - Transcript: Transcript_2026.03.19_00.32.txt
+
+======================================================================
+
+**********************
+Windows PowerShell transcript end
+End time: 20260319180642
+**********************
