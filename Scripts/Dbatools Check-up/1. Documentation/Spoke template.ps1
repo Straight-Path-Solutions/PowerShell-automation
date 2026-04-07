@@ -43,11 +43,6 @@ $spokeFile = Split-Path -Leaf $MyInvocation.MyCommand.Path
 $helpersPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) '3. Helpers'
 . "$helpersPath\Helpers.Shared.ps1"
 
-# Assert read-only posture (Contract A)
-if (-not ($Config['ReadOnly'] -eq $true)) {
-    throw "Config.ReadOnly must be true. This spoke makes no writes."
-}
-
 # ==============================================================================
 # CONFIGURATION VALIDATION
 # ==============================================================================

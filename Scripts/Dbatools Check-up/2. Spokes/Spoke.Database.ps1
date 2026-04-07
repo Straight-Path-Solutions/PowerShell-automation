@@ -44,6 +44,7 @@
         Database.MinBackupLogHours
         Database.AllowMultipleLogFiles
         Database.AllowPercentGrowth
+        Database.FeatureUsageEnabled
 
     Catalog: $global:CheckCat_Database in .\Checkup.Catalog.ps1
 #>
@@ -194,7 +195,7 @@ Register-CheckSection -File $global:__checkFile -Number 3 `
 $pfToken = $null
 try { $pfToken = Write-FetchProgress -Spoke 'Database' -Start } catch {}
 
-# ── Core DB enumeration ───────────────────────────────────────────────────
+# -- Core DB enumeration ---------------------------------------------------
 if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Fetching database list' }
 $dbsRaw = Invoke-DBATools { Get-DbaDatabase @sql -EnableException }
 
@@ -218,7 +219,7 @@ $dbsHealthy = @(
 )
 $dbNamesHealthy = @($dbsHealthy | Select-Object -ExpandProperty Name)
 
-# ── System DB scope for backup checks ────────────────────────────────────
+# -- System DB scope for backup checks ------------------------------------
 $systemDbNames = @('master', 'model', 'msdb')
 $dbsSystem     = @()
 
@@ -250,14 +251,14 @@ $dbsAllHealthy     = @(
 )
 $dbNamesAllHealthy = @($dbsAllHealthy | Select-Object -ExpandProperty Name)
 
-# ── Compatibility check ───────────────────────────────────────────────────
+# -- Compatibility check ---------------------------------------------------
 if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Checking compatibility levels' }
 $compat = $null
 if ($dbNamesHealthy.Count -gt 0) {
     $compat = Invoke-DBATools { Test-DbaDbCompatibility @sql -Database $dbNamesHealthy -EnableException }
 }
 
-# ── dbatools test/measure cmdlets (user-healthy DBs only) ─────────────────
+# -- dbatools test/measure cmdlets (user-healthy DBs only) -----------------
 $vlf        = @()
 $collation  = @()
 $maxdop     = @()
@@ -279,14 +280,14 @@ if ($dbNamesHealthy.Count -gt 0) {
     $maxdop = Invoke-DBATools { Test-DbaMaxDop @sql -EnableException }
     if (-not $maxdop) { $maxdop = @() }
 
-    # ── Query Store: skip system DBs; skip if neither warning flag is set ─
+    # -- Query Store: skip system DBs; skip if neither warning flag is set -
     if (($qsWarnIfOff -or $qsFailIfError) -and $dbNamesHealthyUserOnly.Count -gt 0) {
         if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Fetching Query Store state' }
         $queryStore = Invoke-DBATools { Test-DbaDbQueryStore @sql -EnableException }
         if (-not $queryStore) { $queryStore = @() }
     }
 
-    # ── Growth events: skip if both thresholds are 0 (disabled) ──────────
+    # -- Growth events: skip if both thresholds are 0 (disabled) ----------
     # No -EnableException: inaccessible DBs would throw and discard all results.
     # -WarningAction SilentlyContinue suppresses per-DB noise; [04] surfaces those DBs.
     if ($growthAttnCount -gt 0 -or $growthFailCount -gt 0) {
@@ -295,7 +296,7 @@ if ($dbNamesHealthy.Count -gt 0) {
         if (-not $growthEvts) { $growthEvts = @() }
     }
 
-    # ── Free space: skip if both thresholds are 0 (disabled) ─────────────
+    # -- Free space: skip if both thresholds are 0 (disabled) -------------
     # No -EnableException: same reason as growth events above.
     if ($freeSpaceAttn -gt 0 -or $freeSpaceFail -gt 0) {
         if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Fetching database space usage' }
@@ -304,7 +305,7 @@ if ($dbNamesHealthy.Count -gt 0) {
     }
 }
 
-# ── File-layout (all in-scope DBs, not just healthy) ─────────────────────
+# -- File-layout (all in-scope DBs, not just healthy) ---------------------
 # No -EnableException: this runs against ALL in-scope DBs including inaccessible ones
 # (Restoring, Offline, etc.). A single bad DB would throw and discard results for
 # all others. Warnings are suppressed; [04] and [05] surface the bad databases.
@@ -316,7 +317,7 @@ if ($dbNames.Count -gt 0) {
     $dbFiles = Invoke-DBATools { Get-DbaDbFile @sql -Database $dbNames -WarningAction SilentlyContinue }
     if (-not $dbFiles) { $dbFiles = @() }
 
-    # ── Feature usage: SLOW - gate behind config flag ────────────────────
+    # -- Feature usage: SLOW - gate behind config flag --------------------
     if ($featureUsageEnabled) {
         if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Scanning Enterprise feature usage (slow)' }
         $featureUsage = Invoke-DBATools { Get-DbaDbFeatureUsage @sql -Database $dbNames -WarningAction SilentlyContinue }
@@ -324,7 +325,7 @@ if ($dbNames.Count -gt 0) {
     }
 }
 
-# ── Scope summary (informational) ─────────────────────────────────────────
+# -- Scope summary (informational) -----------------------------------------
 if ($pfToken) { Update-FetchProgress -Token $pfToken -Label 'Summarizing database scope' }
 $systemNote = if ($dbsSystem.Count -gt 0) {
     '; system DBs always-checked (backup): {0}' -f ($dbsSystem.Name -join ', ')
@@ -357,7 +358,7 @@ Invoke-Check -SpokeFile $spoke -CatalogName 'Database' -Function 'Get-DbaDatabas
             return @{ Status='pass'; Details=('All {0} in-scope database(s) are accessible.' -f $dbNames.Count) }
         }
 
-        # ── per-item entries ──────────────────────────────────────────────────
+        # -- per-item entries --------------------------------------------------
         $entrySplat = $global:CheckCat_Database['Get-DbaDatabase']['DbAccessibleEntry']
         foreach ($d in $bad) {
             $statusStr = ([string]$d.Status).Trim()
@@ -395,7 +396,7 @@ Invoke-Check -SpokeFile $spoke -CatalogName 'Database' -Function 'Get-DbaDatabas
             return @{ Status='pass'; Details=('All {0} in-scope database(s) have Normal status.' -f $dbNames.Count) }
         }
 
-        # ── per-item entries ──────────────────────────────────────────────────
+        # -- per-item entries --------------------------------------------------
         $entrySplat = $global:CheckCat_Database['Get-DbaDatabase']['DbStatusEntry']
         foreach ($d in $bad) {
             $statusStr = ([string]$d.Status).Trim()
@@ -421,7 +422,7 @@ Invoke-Check -SpokeFile $spoke -CatalogName 'Database' -Function 'Get-DbaDatabas
         if (-not $dbsRaw)          { return @{ Status='attention'; Details='Could not enumerate databases (Get-DbaDatabase returned no data).' } }
         if ($dbNames.Count -eq 0)  { return @{ Status='info';      Details='No databases in scope.' } }
 
-        # ── per-item entries ──────────────────────────────────────────────────
+        # -- per-item entries --------------------------------------------------
         $entrySplat = $global:CheckCat_Database['Get-DbaDatabase']['DbOwnerEntry']
         
         foreach ($db in $dbs) {
@@ -432,7 +433,7 @@ Invoke-Check -SpokeFile $spoke -CatalogName 'Database' -Function 'Get-DbaDatabas
                 -SpokeFile $spoke
         }
 
-        # ── rollup finding ────────────────────────────────────────────────────
+        # -- rollup finding ----------------------------------------------------
         $owners = @($dbs | ForEach-Object { Get-DatabaseOwnerName -Database $_ })
         $uniqueOwners = @($owners | Select-Object -Unique | Sort-Object)
         

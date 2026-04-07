@@ -1251,7 +1251,7 @@ function Invoke-Check {
         [scriptblock]$Run
     )
 
-    # ── Catalog lookup ────────────────────────────────────────────────────────
+    # -- Catalog lookup --------------------------------------------------------
     # Resolve the catalog global by convention: $global:CheckCat_<CatalogName>
     $catalogVar  = "CheckCat_$CatalogName"
     $catalog     = Get-Variable -Name $catalogVar -Scope Global -ValueOnly -ErrorAction SilentlyContinue
@@ -1269,10 +1269,10 @@ function Invoke-Check {
         if ($entry.ContainsKey('Priority')) { $priority = $entry.Priority }
     }
 
-    # ── SQL connection splat ──────────────────────────────────────────────────
+    # -- SQL connection splat --------------------------------------------------
     $sql = Get-SqlConnectionSplat -Target $Target
 
-    # ── Run the check - fully isolated ───────────────────────────────────────
+    # -- Run the check - fully isolated ---------------------------------------
     $result = $null
     try {
         $result = & $Run $sql $Target $Config
@@ -1300,7 +1300,7 @@ function Invoke-Check {
         return   # <-- spoke continues to the next check
     }
 
-    # ── Normalise result ──────────────────────────────────────────────────────
+    # -- Normalise result ------------------------------------------------------
     if ($null -eq $result) {
         # -Run returned nothing - treat as a non-finding info result
         $result = @{ Status = 'info'; Details = 'Check returned no result.' }
@@ -1312,7 +1312,7 @@ function Invoke-Check {
 
     if ($status -notin @('pass', 'attention', 'fail', 'info')) { $status = 'info' }
 
-    # ── Append the finding ────────────────────────────────────────────────────
+    # -- Append the finding ----------------------------------------------------
     $Findings.Value += New-Finding `
         -Label     $label `
         -Category  $category `
