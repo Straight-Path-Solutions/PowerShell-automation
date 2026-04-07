@@ -47,7 +47,7 @@ param(
   , [string]$OutputFolder           = (Join-Path $ScriptPath '4. Output')
   , [string]$TemplatePath           = (Join-Path $ScriptPath '4. Output\Report.Template.html')
   , [string]$SettingsPath           = (Join-Path $ScriptPath '4. Output\settings.json')
-  , [bool]  $OverwriteSettings      = $false
+  , [bool]  $OverwriteSettings      = $true
 
     # -------------------------------------------------------------------------
     #  CREDENTIAL & DISCOVERY
