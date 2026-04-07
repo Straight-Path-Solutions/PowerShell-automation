@@ -29,7 +29,7 @@
 #   Contract J  - JSON output schema  (Write-InstancesJson, system of record)
 #
 # DATA FLOW:
-#   Start-SqlHealthSuite.ps1        -> builds $Settings, calls this engine once
+#   Start-Checkup.ps1        -> builds $Settings, calls this engine once
 #   Checkup.Engine.ps1              -> builds $Config, runs targets x spokes loop
 #   Spokes\Spoke.*.ps1              -> append findings to [ref]$Findings
 #   Write-InstancesJson             -> Findings_<ts>.json  (system of record)
@@ -116,7 +116,7 @@ $script:ENGINE_VERSION = '1.0.0'
 #
 #  Dot-sources are intentionally OUTSIDE the main try/finally block.
 #  A failure here means the engine cannot function at all; the error should
-#  propagate to the caller (Start-SqlHealthSuite.ps1) immediately.
+#  propagate to the caller (Start-Checkup.ps1) immediately.
 #  Publish-HealthSuiteFunctions promotes every function in Helpers.*.ps1 into
 #  global scope so spoke runspaces that dot-source only Helpers.Shared.ps1 still
 #  have access to the engine helpers they may need.
@@ -294,7 +294,7 @@ Write-Host "  [+] Fetch progress system initialized" -ForegroundColor Green
     # =========================================================================
     #  STEP 1 - SETTINGS NORMALISATION  (Contract E)
     #
-    #  $Settings arrives from Start-SqlHealthSuite.ps1 (the menu).
+    #  $Settings arrives from Start-Checkup.ps1 (the menu).
     #  The engine's only additions to $Config are the three operational flags
     #  at the bottom of this section:
     #    ReadOnly            = $true   (hard-wired, always)

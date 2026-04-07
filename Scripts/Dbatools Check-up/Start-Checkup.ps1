@@ -229,7 +229,7 @@ if ($GenerateExampleTargets) {
     
     # Generate example settings.json (minimal subset)
     $exampleSettings = @{
-        _comment = "This is an example settings file. The actual settings are defined in Start-SqlHealthSuite.ps1."
+        _comment = "This is an example settings file. The actual settings are defined in Start-Checkup.ps1."
         Database = @{
             Enabled = $true
             IncludeSystem = $true
@@ -243,8 +243,8 @@ if ($GenerateExampleTargets) {
     Write-Host '>>> Next steps:' -ForegroundColor Yellow
     Write-Host '  1. Review and customize targets.example.json' -ForegroundColor Gray
     Write-Host '  2. Copy to targets.json in the suite root folder' -ForegroundColor Gray
-    Write-Host '  3. Adjust thresholds in the $Settings block of Start-SqlHealthSuite.ps1' -ForegroundColor Gray
-    Write-Host '  4. Run: .\Start-SqlHealthSuite.ps1' -ForegroundColor Gray
+    Write-Host '  3. Adjust thresholds in the $Settings block of Start-Checkup.ps1' -ForegroundColor Gray
+    Write-Host '  4. Run: .\Start-Checkup.ps1' -ForegroundColor Gray
     Write-Host ''
     
     return

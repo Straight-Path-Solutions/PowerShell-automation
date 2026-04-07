@@ -475,7 +475,7 @@ function New-SkipFinding {
         -Category 'Configuration' `
         -Priority 'Low' `
         -Status   'attention' `
-        -Details  "Check skipped: required config key '$Key' is absent from Settings. Add it to Start-SqlHealthSuite.ps1." `
+        -Details  "Check skipped: required config key '$Key' is absent from Settings. Add it to Start-Checkup.ps1." `
         -Source   'Config' `
         -SpokeFile $SpokeFile
 }

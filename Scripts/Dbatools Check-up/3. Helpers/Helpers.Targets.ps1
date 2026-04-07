@@ -509,7 +509,7 @@ function Write-TargetsJsonFromPs1 {
         serialized to JSON) and stores only CredKey, which is resolved at
         runtime by Get-ConfiguredTargets.
 
-        Used by: Start-SqlHealthSuite.ps1 (initialization path)
+        Used by: Start-Checkup.ps1 (initialization path)
 
     .PARAMETER TargetsPs1Path
         Full path to Targets.ps1. Must define $TargetsConfig at script or
