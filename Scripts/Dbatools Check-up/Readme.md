@@ -2,7 +2,7 @@
 
 A read-only SQL Server health check suite built on [dbatools](https://dbatools.io). It discovers, evaluates, and reports on your SQL Server instances across a wide range of categories — producing a fully self-contained HTML report with no external dependencies.
 
-> **This project is actively evolving.** The first release ships with the Database spoke. Additional spokes are being released incrementally — check back for updates or watch the repo.
+> **This project is actively evolving.** Four spokes are now available: Database, Host, Instance, and Maintenance. Additional spokes are being released incrementally — check back for updates or watch the repo.
 
 ---
 
@@ -158,6 +158,93 @@ Database = @{
 }
 ```
 
+Key settings for the **Host** check pack:
+
+```powershell
+Host = @{
+    Enabled                        = $true
+
+    PowerPlanName                  = ''      # '' = accept Test-DbaPowerPlan recommendation
+    PowerPlanNonCompliantIsFail    = $true
+
+    PendingRebootIsFail            = $false  # $true → fail; $false → attention
+
+    RequireDomainMember            = $true   # $false = skip domain check
+    DomainNonMemberIsFail          = $false
+
+    MinOsBuild                     = 0       # 0 = disabled; 2019 = 17763; 2022 = 20348
+    OsBuildNonCompliantIsFail      = $false
+
+    WarnIfVirtualMachine           = $false  # $true → attention when VM detected
+
+    RequireLpim                    = $false  # Lock Pages In Memory
+    LpimNonCompliantIsFail         = $false
+
+    RequireIfi                     = $true   # Instant File Initialization
+    IfiNonCompliantIsFail          = $false
+}
+```
+
+Key settings for the **Instance** check pack:
+
+```powershell
+Instance = @{
+    Enabled                   = $true
+
+    MinCostThreshold          = 50      # Flag if Cost Threshold for Parallelism is below this
+    RequireOptimizeForAdHoc   = $true
+    RequireRemoteDAC          = $true
+    RequireAdHocDistQOff      = $true
+    RequireOleAutomationOff   = $true
+    AllowCLR                  = $false
+    RequireBackupCompression  = $true
+    AllowContainedDbAuth      = $false
+
+    CheckInstanceFillFactor   = $true
+    ExpectedFillFactor        = 100     # 0 and 100 are treated as equivalent defaults
+
+    ErrorLogScanDays          = 7       # Days back to scan for Sev 17+ errors
+    ErrorLogExclusions        = @(...)  # Strings to suppress from error log findings
+
+    CheckStartupParams        = $true   # Requires WMI / PS Remoting
+
+    BuildMode                 = 'Latest'   # 'Latest' | 'MaxBehind' | 'MinimumBuild'
+    BuildMaxBehind            = 1
+    BuildMinimum              = $null      # e.g. '15.0.4153.1'
+}
+```
+
+Key settings for the **Maintenance** check pack:
+
+```powershell
+Maintenance = @{
+    Enabled                   = $true
+
+    IncludeSystemDatabases    = $false
+
+    CheckDuplicateIndexes     = $true
+    CheckUnusedIndexes        = $true
+    UnusedIndexIgnoreUptime   = $false  # $true = bypass 7-day uptime guard
+    CheckDisabledIndexes      = $true
+
+    CheckStatsStaleness       = $true
+    StatsStaleDays            = 7
+
+    CheckWaitStats            = $true
+    WaitStatsThreshold        = 100     # Min WaitSeconds for a wait type to appear
+    WaitStatsTopN             = 10      # Number of top waits to surface
+
+    CheckLastGoodCheckDb      = $true
+    CheckDbMaxDays            = 7
+
+    IdentityUsageWarnPercent  = 80
+    IdentityUsageFailPercent  = 95
+
+    CheckErrorLogConfig       = $true
+    ErrorLogMinFiles          = 52      # Attention if fewer log files retained
+}
+```
+
 ---
 
 ## What Gets Checked
@@ -168,19 +255,19 @@ Each finding is assigned one of four statuses: **Pass**, **Attention**, **Fail**
 
 | Spoke | Checks |
 |---|---|
-| **Database** | Backup currency (Full/Diff/Log), VLF counts, auto-growth events, free space, auto-shrink, auto-close, page verify, TRUSTWORTHY, TDE inventory, Query Store status, recovery model, compatibility level, owner compliance, collation match, file growth type, multiple log files, statistics settings, Service Broker inventory |
+| **Database** | Backup currency (Full/Diff/Log), VLF counts, auto-growth events, free space, auto-shrink, auto-close, page verify, TRUSTWORTHY, TDE inventory, Query Store status, recovery model, compatibility level, owner compliance, collation match, file growth type, multiple log files, statistics settings, Service Broker inventory, contained databases, feature usage |
+| **Host** | Power plan compliance, pending reboot, VM detection, HyperThreading ratio, NUMA topology, domain membership, OS version/build compliance, OS inventory, Instant File Initialization (IFI), Lock Pages In Memory (LPIM), OS privilege inventory, SQL firewall rules inventory |
+| **Instance** | Build/patch compliance, version support status, max server memory, MAXDOP, optimize for ad-hoc workloads, xp_cmdshell, ad hoc distributed queries, OLE automation, CLR integration, contained DB auth, remote DAC, cost threshold for parallelism, fill factor, backup compression, sp_configure full inventory, pending configuration changes, SQL feature discovery, error log scan, global trace flags, startup parameters |
+| **Maintenance** | Last good CHECKDB age, statistics staleness, duplicate/overlapping indexes, unused indexes, disabled indexes, top wait statistics, identity column capacity, error log retention configuration |
 
 ### Coming Soon
 
 | Spoke | Planned Checks |
 |---|---|
-| **Instance** | Build version, startup parameters, sp_configure, surface area config, error log scan, SQL Agent status |
-| **Maintenance** | Last CHECKDB age, statistics staleness, duplicate/unused/disabled indexes, wait statistics, identity column capacity |
 | **HADR** | Availability Group health, replica connectivity, log shipping, database mirroring |
 | **Security & Audit** | Server/database audit specs, SA account status, surface area exposure |
 | **TempDB** | File count, equal sizing, growth config, space utilization |
 | **Networking** | TCP/IP config, named pipes, SPN compliance, static vs. dynamic port, round-trip latency |
-| **Host** | Power plan, disk space, OS configuration |
 | **Misc** | Database Mail health, Extended Events sessions, notable trace flags |
 
 ---
@@ -261,11 +348,16 @@ sql-health-suite\
 ├── Checkup.Catalog.ps1        ← Check metadata (labels, categories, priorities)
 ├── targets.json               ← Your target instances
 ├── 2. Spokes\
-│   └── Spoke.Database.ps1     ← Database check pack (more coming)
+│   ├── Spoke.Database.ps1     ← Database check pack
+│   ├── Spoke.Host.ps1         ← Host / OS check pack
+│   ├── Spoke.Instance.ps1     ← Instance-level check pack
+│   └── Spoke.Maintenance.ps1  ← Maintenance check pack
 ├── 3. Helpers\
 │   ├── Helpers.Shared.ps1
 │   ├── Helpers.Engine.ps1
 │   ├── Helpers.Targets.ps1
+│   ├── Helpers.Database.ps1
+│   └── Helpers.Host.ps1
 └── 4. Output\
     ├── Report.Template.html
     ├── Report.HtmlBuilder.ps1
