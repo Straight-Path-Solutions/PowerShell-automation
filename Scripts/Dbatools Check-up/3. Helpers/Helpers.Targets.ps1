@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 # =============================================================================
-# Helpers\Common.Targets.ps1  -  Target construction & discovery helpers
+# Helpers\Helpers.Targets.ps1  -  Target construction & discovery helpers
 # =============================================================================
 #
 # WHAT BELONGS HERE:
@@ -10,7 +10,7 @@
 #
 # WHAT DOES NOT BELONG HERE:
 #   Connection testing (probe logic)       -> Checkup.Engine.ps1 (Test-SqlConnection)
-#   Spoke invocation or check logic        -> Core.Checkup.ps1 / Checks.*.ps1
+#   Spoke invocation or check logic        -> Checkup.Engine.ps1 / Spoke.*.ps1
 #   Finding creation                       -> Helper.Shared.ps1 (New-Finding)
 #
 # CONTRACT D - TARGET OBJECT SCHEMA:
@@ -622,7 +622,7 @@ function Get-RowString {
 
     .NOTES
         Intentionally not exported (no entry in Publish-HealthSuiteFunctions).
-        This is an internal helper used only within Common.Targets.ps1.
+        This is an internal helper used only within Helpers.Targets.ps1.
         
         The function explicitly checks PSObject.Properties to handle both
         hashtables and PSCustomObjects uniformly.

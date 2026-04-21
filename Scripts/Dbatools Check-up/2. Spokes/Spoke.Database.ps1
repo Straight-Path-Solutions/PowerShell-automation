@@ -14,38 +14,6 @@
     Spoke contract (Contract A):
         param([object]$Target, [hashtable]$Config, [ref]$Findings)
 
-    Config keys consumed (ALL required - no defaults, MissingConfigKey if absent):
-        Database.Enabled
-        Database.IncludeSystem
-        Database.ExcludeDatabases
-        Database.VlfCountWarn
-        Database.VlfCountFail
-        Database.DbOwnerComplianceEnabled
-        Database.DbOwnerExpectedPrincipal
-        Database.RequireAutoShrinkOff
-        Database.RequireAutoCloseOff
-        Database.RequirePageVerifyChecksum
-        Database.RequireTrustworthyOff
-        Database.TrustworthyAllowList
-        Database.RequireTde
-        Database.RequireAutoUpdateStats
-        Database.RequireAutoCreateStats
-        Database.QueryStoreWarnIfOff
-        Database.QueryStoreFailIfError
-        Database.GrowthEventsAttentionCount
-        Database.GrowthEventsFailCount
-        Database.FreeSpacePctAttention
-        Database.FreeSpacePctFail
-        Database.RecoveryModelComplianceEnabled
-        Database.RecoveryModelExpected
-        Database.CompatibilityLevelComplianceEnabled
-        Database.MinBackupFullHours
-        Database.MinBackupDiffHours
-        Database.MinBackupLogHours
-        Database.AllowMultipleLogFiles
-        Database.AllowPercentGrowth
-        Database.FeatureUsageEnabled
-
     Catalog: $global:CheckCat_Database in .\Checkup.Catalog.ps1
 #>
 

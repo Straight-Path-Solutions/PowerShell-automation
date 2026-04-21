@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 # =============================================================================
-# Helpers\Checkup.Engine.ps1  -  Engine-facing primitives for the SQL Health Suite
+# Helpers\Helpers.Engine.ps1  -  Engine-facing primitives for the SQL Health Suite
 # =============================================================================
 #
 # WHAT BELONGS HERE:
@@ -12,9 +12,9 @@
 #   Spoke-facing primitives (Cfg, Invoke-DBATools, Invoke-Check, New-Finding, etc.)
 #     -> Helper.Shared.ps1
 #   Pack-specific shared calculations (Build-AgentJobMetrics, etc.)
-#     -> Common.<PackName>.ps1
+#     -> Helpers.<PackName>.ps1
 #   Check logic of any kind
-#     -> Checks.*.ps1
+#     -> Spoke.*.ps1
 #
 # DEPENDENCIES:
 #   - Helper.Shared.ps1 (must be dot-sourced first by Core.Checkup.ps1)
@@ -650,7 +650,7 @@ function Test-SqlConnection {
 #region Console output
 
 function Write-VLog {
-    <#
+<#
     .SYNOPSIS
         Write a console line only when the verbose logging flag is active.
 
@@ -660,26 +660,31 @@ function Write-VLog {
         so spokes and helpers can call this freely without conditionals.
 
     .PARAMETER Message
-        The line to write.
+        The line to write. Defaults to an empty string (blank verbose line).
 
     .PARAMETER Color
         Foreground colour passed to Write-Host. Default: Gray.
 
     .PARAMETER Indent
         Number of two-space indentation levels prepended to Message.
+        Each level adds two spaces: Indent=1 -> '  Message', Indent=2 -> '    Message'.
 
     .EXAMPLE
         Write-VLog "Starting backup checks" -Color Cyan
-        
+
     .EXAMPLE
-        Write-VLog "  Processing AG listener" -Indent 1
+        Write-VLog -Message "Processing AG listener" -Indent 1
+
+    .EXAMPLE
+        Write-VLog   # Emits a blank line when verbose is active
 
     .NOTES
         Contract: E (Config visibility)
-        
+
         Used by: Core.Checkup.ps1, all spokes (conditional console output)
-        
-        Requires $_verboseRun to be set in the caller's scope (typically script scope).
+
+        Requires $_verboseRun to be set in the caller's script scope (typically by
+        Core.Checkup.ps1 from Config['Logging']['VerboseRun']).
         Silently no-ops when the variable is not found or is $false.
     #>
     [CmdletBinding()]
@@ -713,17 +718,31 @@ function Write-Section {
         Print a clearly visible section header to the console.
         Used by the engine to delineate the nine run steps.
 
+    .DESCRIPTION
+        Emits a blank line, a 70-character DarkGray separator, a Cyan-colored
+        title line, and a second separator. Output is always visible regardless
+        of the VerboseRun or ShowCheckParams logging flags.
+
+        Used at the top of each major engine phase so the console transcript
+        is easy to scan for the start of any step.
+
     .PARAMETER Title
         The step title, e.g. 'STEP 1 - Settings'.
 
     .EXAMPLE
         Write-Section -Title 'STEP 3 - Target Resolution'
 
+    .EXAMPLE
+        Write-Section -Title 'STEP 7 - Report Generation'
+
     .NOTES
         Used by: Core.Checkup.ps1 (run step headers)
-        
-        Emits three lines: blank line, separator, title, separator.
-        Always visible regardless of verbose logging settings.
+
+        Output format (four lines):
+          <blank>
+          ----------------------------------------------------------------------
+            STEP N - Title
+          ----------------------------------------------------------------------
     #>
     [CmdletBinding()]
     param(
@@ -745,7 +764,7 @@ function Write-PackParams {
         Controlled by the $_showCheckParams logging flag.
 
     .DESCRIPTION
-        Extracts the pack name from the spoke filename (strips 'Checks.' prefix
+        Extracts the pack name from the spoke filename (strips 'Spoke.' prefix
         and '.ps1' suffix), then prints every key/value pair in Config[PackName].
 
         This makes the effective config for each pack visible in the transcript,
@@ -753,16 +772,16 @@ function Write-PackParams {
         no hidden knobs).
 
     .PARAMETER PackName
-        The spoke filename, e.g. 'Checks.Agent.ps1'.
+        The spoke filename, e.g. 'Spoke.Agent.ps1'.
 
     .PARAMETER Config
         The full $Config hashtable passed to the engine.
 
     .EXAMPLE
-        Write-PackParams -PackName 'Checks.Agent.ps1' -Config $Config
+        Write-PackParams -PackName 'Spoke.Agent.ps1' -Config $Config
 
     .EXAMPLE
-        Write-PackParams -PackName 'Checks.Storage.ps1' -Config $Config
+        Write-PackParams -PackName 'Spoke.Storage.ps1' -Config $Config
         # Output (if Config.Storage exists):
         #   [Config.Storage]
         #     DiskFreePercentWarn = 15
@@ -795,8 +814,8 @@ function Write-PackParams {
 
     if (-not $showParams) { return }
 
-    # Derive sub-key: 'Checks.Agent.ps1' -> 'Agent'
-    $subKey = $PackName -replace '^Checks\.', '' -replace '\.ps1$', ''
+    # Derive sub-key: 'Spoke.Agent.ps1' -> 'Agent'
+    $subKey = $PackName -replace '^Spoke\.', '' -replace '\.ps1$', ''
 
     if ($Config.ContainsKey($subKey) -and $Config[$subKey] -is [hashtable]) {
         # Check if tree output mode is enabled
@@ -1284,9 +1303,9 @@ function Update-FetchProgress {
 # =============================================================================
 #  8. Invoke Spoke with isolation
 # =============================================================================
-#region Fetch progress
+#region Invoke-Spoke
 function Invoke-Spoke {
-    <#
+<#
     .SYNOPSIS
         Execute a spoke script with full isolation: catch any unhandled error,
         clean up orphaned fetch-progress resources, and always return a findings
@@ -1316,6 +1335,18 @@ function Invoke-Spoke {
 
     .OUTPUTS
         [bool] - $true if the spoke completed without error, $false if it threw.
+
+    .EXAMPLE
+        $findings = [System.Collections.ArrayList]::new()
+        $ok = Invoke-Spoke `
+            -SpokePath 'C:\Suite\Spokes\Spoke.Agent.ps1' `
+            -Target    $target `
+            -Config    $config `
+            -Findings  ([ref]$findings)
+
+        if (-not $ok) {
+            Write-Warning "Agent spoke failed; synthetic finding added."
+        }
 
     .NOTES
         Used by: Core.Checkup.ps1 (spoke dispatch loop)

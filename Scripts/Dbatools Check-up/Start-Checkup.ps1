@@ -13,7 +13,7 @@
   It does NOT run checks, query SQL, or write findings.
 
 .NOTES
-  Architecture: Menu -> Engine (Checkup.Engine.ps1) -> Spokes (Checks.*.ps1) -> JSON -> HTML
+  Architecture: Menu -> Engine (Checkup.Engine.ps1) -> Spokes (Spoke.*.ps1) -> JSON -> HTML
   Read-only posture: this suite NEVER modifies SQL Server configuration.
 
   Version: 1.0.0
@@ -42,25 +42,25 @@ param(
     #  PATHS  (all I/O controlled here - nothing buried elsewhere)
     # -------------------------------------------------------------------------
   , [string]$ConfigPath             = (Join-Path $ScriptPath 'targets.json')
-  , [bool]  $ReplaceTargetConfig    = $false
+  , [bool]  $ReplaceTargetConfig    = $false  # $true = overwrite targets.json with a freshly generated list; $false = keep the existing file.
   , [string]$TargetsPs1Path         = (Join-Path $ScriptPath '3. Helpers\Targets.ps1')  # Legacy PS1 support
   , [string]$OutputFolder           = (Join-Path $ScriptPath '4. Output')
   , [string]$TemplatePath           = (Join-Path $ScriptPath '4. Output\Report.Template.html')
   , [string]$SettingsPath           = (Join-Path $ScriptPath '4. Output\settings.json')
-  , [bool]  $OverwriteSettings      = $true
+  , [bool]  $OverwriteSettings      = $true   # $true = overwrite the settings.json export each run; $false = keep the existing export.
 
     # -------------------------------------------------------------------------
     #  CREDENTIAL & DISCOVERY
     # -------------------------------------------------------------------------
-  , [bool]$UseSingleCredential      = $false
-  , [bool]$UseNoCredential          = $true
-  , [bool]$EnableDiscovery          = $false
+  , [bool]$UseSingleCredential      = $false  # $true = prompt once and reuse the same SQL credential for all targets.
+  , [bool]$UseNoCredential          = $true   # $true = Windows auth only (no SQL credential); $false = prompt per target.
+  , [bool]$EnableDiscovery          = $false  # $true = auto-discover SQL instances on reachable hosts before running checks.
 
     # -------------------------------------------------------------------------
     #  OUTPUT HOUSEKEEPING
     # -------------------------------------------------------------------------
-  , [int] $KeepLastReports          = 5
-  , [bool]$OpenReportAfterRun       = $true
+  , [int] $KeepLastReports          = 5     # Number of historical HTML reports to retain; older ones are deleted automatically.
+  , [bool]$OpenReportAfterRun       = $true  # $true = open the HTML report in the default browser when the run finishes.
 
     # -------------------------------------------------------------------------
     #  OPERATIONAL MODES
@@ -72,8 +72,8 @@ param(
 # =============================================================================
 #  CONSTANTS
 # =============================================================================
-$SUITE_VERSION                      = '1.0.0'
-$MIN_DBATOOLS_VERSION               = [version]'2.7.25'
+$SUITE_VERSION                      = '1.1.0'
+$MIN_DBATOOLS_VERSION               = [version]'2.7.0'
 $ErrorActionPreference              = 'Stop'
 $VerbosePreference                  = 'SilentlyContinue'
 
@@ -103,14 +103,14 @@ $Settings = @{
         TimestampEveryPack = $true   # Show elapsed time per check pack in live output.
     }
 
-    ConnectionTestTimeoutSeconds = 10
-    CheckTimeoutSeconds = 300 # 5 minutes - adjust as needed;
+    ConnectionTestTimeoutSeconds = 10   # Seconds to wait when testing whether a SQL instance is reachable before skipping it.
+    CheckTimeoutSeconds = 300           # Maximum seconds any single check is allowed to run before it is aborted (5 min default).
     
     # -------------------------------------------------------------------------
     #  DATABASE PACK
     # -------------------------------------------------------------------------
     Database = @{
-        Enabled                      = $true
+        Enabled                      = $true  # $false = skip all database-level checks entirely.
 
         # Scope control
         IncludeSystem                = $true   # $true = include system DBs in check scope.
@@ -121,26 +121,26 @@ $Settings = @{
         VlfCountFail                 = 300    # Fail when VLF count exceeds this.
 
         # Owner compliance
-        DbOwnerComplianceEnabled     = $true
-        DbOwnerExpectedPrincipal     = 'sa'
+        DbOwnerComplianceEnabled     = $true  # $true = flag databases whose owner does not match DbOwnerExpectedPrincipal.
+        DbOwnerExpectedPrincipal     = 'sa'   # Login name that every database owner should match.
 
         # Known anti-patterns - set $true to escalate attention -> fail
-        RequireAutoShrinkOff         = $true
-        RequireAutoCloseOff          = $true
-        RequirePageVerifyChecksum    = $true
+        RequireAutoShrinkOff         = $true  # Auto Shrink shrinks files then lets them regrow, causing fragmentation and I/O spikes.
+        RequireAutoCloseOff          = $true  # Auto Close tears down the SQL engine after the last connection, adding reconnect latency.
+        RequirePageVerifyChecksum    = $true  # CHECKSUM page verify detects storage corruption; weaker options miss silent data loss.
 
         # Security settings
-        RequireTrustworthyOff        = $true
-        TrustworthyAllowList         = @('msdb')  # DBs where TRUSTWORTHY ON is expected and suppressed.
+        RequireTrustworthyOff        = $true          # TRUSTWORTHY ON enables cross-DB ownership chains; flag unless on the allowlist below.
+        TrustworthyAllowList         = @('msdb')      # DBs where TRUSTWORTHY ON is expected and suppressed.
         RequireTde                   = $false      # $false = inventory only; $true = fail if unencrypted.
 
         # Statistics
-        RequireAutoUpdateStats       = $true
+        RequireAutoUpdateStats       = $true   # Auto Update Stats keeps query plan estimates accurate; disabling it causes bad execution plans.
         RequireAutoCreateStats       = $false  # Low signal on most instances; attention only.
 
         # Query Store (SQL 2016+ only - silently skipped on older instances)
-        QueryStoreWarnIfOff          = $true
-        QueryStoreFailIfError        = $true
+        QueryStoreWarnIfOff          = $true  # $true = 'attention' when Query Store is disabled; useful for workload regression analysis.
+        QueryStoreFailIfError        = $true  # $true = 'fail' when Query Store is in an error state and not collecting data.
 
         # Auto-growth events (counts from Default Trace window, typically ~24h)
         GrowthEventsAttentionCount   = 5
@@ -163,10 +163,137 @@ $Settings = @{
         MinBackupLogHours            = 2     # Log backup stale after this many hours.
 
         # File rules
-        AllowMultipleLogFiles       = $false  
-        AllowPercentGrowth          = $false  
+        AllowMultipleLogFiles       = $false  # $false = flag databases with more than one log file (rarely beneficial, complicates VLF management).
+        AllowPercentGrowth          = $false  # $false = flag files using percentage-based auto-growth (produces unpredictably large or tiny growths).
 
         FeatureUsageEnabled         = $false  # $true = include feature usage checks; $false = skip and do not report on feature usage. this is a slow collection.
+    }
+
+    # -------------------------------------------------------------------------
+    #  HOST PACK
+    # -------------------------------------------------------------------------
+    Host = @{
+        Enabled                        = $true   # $false = skip all host-level checks entirely.
+
+        # Power plan
+        # SQL Server performs best with the 'High performance' power plan.
+        PowerPlanName                  = ''  # '' = accept whatever Test-DbaPowerPlan recommends; or set an exact name e.g. 'High performance'.
+        PowerPlanNonCompliantIsFail    = $true              # $true → 'fail'; $false → 'attention'.
+
+        # Pending reboot
+        # A pending reboot can cause unexpected behaviour; flag it so the team is aware.
+        PendingRebootIsFail            = $false  # $true → 'fail' if a reboot is pending; $false → 'attention'.
+
+        # Domain membership
+        # Useful in environments where domain-joined servers are mandated by policy.
+        RequireDomainMember            = $true   # $true = servers must be domain-joined; $false = skip domain check.
+        DomainNonMemberIsFail          = $false  # $true → 'fail' if not domain-joined; $false → 'attention'.
+
+        # OS build compliance
+        # Ensure hosts meet a minimum Windows patch level.
+        MinOsBuild                     = 0       # 0 = disabled; Windows Server 2019 = 17763; 2022 = 20348.
+        OsBuildNonCompliantIsFail      = $false  # $true → 'fail' if OS build < MinOsBuild; $false → 'attention'.
+
+        # Virtual machine
+        # Running SQL Server in a VM is fine but worth surfacing for capacity planning.
+        WarnIfVirtualMachine           = $false  # $true → 'attention' when VM detected; $false → 'info' only.
+
+        # Lock Pages in Memory (LPIM)
+        # LPIM prevents Windows from paging SQL Server buffer pool to disk.
+        RequireLpim                    = $false  # $true = SQL Server service account must hold the LPIM privilege; $false = skip check.
+        LpimNonCompliantIsFail         = $false  # $true → 'fail' if LPIM not granted; $false → 'attention'.
+
+        # Instant File Initialization (IFI)
+        # IFI lets SQL Server skip zeroing data files, dramatically speeding up growth events and restores.
+        RequireIfi                     = $true   # $true = SQL Server service account must hold the IFI privilege; $false = skip check.
+        IfiNonCompliantIsFail          = $false  # $true → 'fail' if IFI not enabled; $false → 'attention'.
+    }
+
+    # -------------------------------------------------------------------------
+    #  INSTANCE PACK
+    # -------------------------------------------------------------------------
+    Instance = @{
+        Enabled                   = $true  # $false = skip all instance-level checks entirely.
+
+        # sp_configure policies
+        MinCostThreshold          = 50      # CostThreshold: flag if below this value.
+        RequireOptimizeForAdHoc   = $true   # OptimizeForAdHoc: fail if not best practice.
+        RequireRemoteDAC          = $true   # RemoteDAC: attention if disabled.
+        RequireAdHocDistQOff      = $true   # AdHocDistributed: attention if enabled.
+        RequireOleAutomationOff   = $true   # OleAutomation: attention if enabled.
+        AllowCLR                  = $false   # $true = CLR integration is permitted; $false = flag as 'attention' if CLR is enabled on the instance.
+        RequireBackupCompression  = $true   # BackupCompression: attention if disabled.
+        MaxWorkerThreadsMax       = 0       # 0 = skip check (auto is acceptable).
+        NetworkPacketSizeMax      = 0       # 0 = skip check.
+        AllowContainedDbAuth      = $false  # ContainedDbAuth: attention if enabled.
+
+        #Fill factor
+        CheckInstanceFillFactor   = $true   # Set to $false to skip the fill factor check entirely
+        ExpectedFillFactor        = 100     # Expected fill factor (0 and 100 are treated as equivalent defaults)
+
+        # Error log scan (Get-DbaErrorLog — reactive scan for Sev 17+ events)
+        ErrorLogScanDays          = 7       # How many days back to scan for errors.
+
+        # Messages matching any of these strings are suppressed from the error log findings.
+        ErrorLogExclusions = @(
+            'BACKUP DATABASE successfully processed',
+            'CHECKDB found 0 allocation errors and 0 consistency errors in database',
+            'found 0 errors and repaired 0 errors',
+            'Database backed up',
+            'Log was backed up',
+            'informational message only. No user action is required'
+        )
+
+        # Startup parameters
+        # NOTE: Get-DbaStartupParameter uses -Credential (Windows/WMI), NOT -SqlCredential.
+        # Will not work on Linux hosts or where WMI/PS Remoting is unavailable.
+        CheckStartupParams        = $true  # $true = verify trace flags and startup parameter best practices (requires WMI/PS Remoting).
+
+        # Instance Build checking policy
+        BuildMode         = 'Latest'   # 'Latest' | 'MaxBehind' | 'MinimumBuild'
+        BuildMaxBehind    = 1          # Used when BuildMode = 'MaxBehind'.
+        BuildMinimum      = $null      # Used when BuildMode = 'MinimumBuild'; e.g. '15.0.4153.1'.
+    }
+
+    # -------------------------------------------------------------------------
+    #  MAINTENANCE PACK
+    # -------------------------------------------------------------------------
+    Maintenance = @{
+        Enabled                   = $true  # $false = skip all maintenance-level checks entirely.
+
+        # Database scope
+        IncludeSystemDatabases    = $false  # $true → include master/model/msdb/tempdb.
+
+        # Duplicate / Overlapping indexes
+        CheckDuplicateIndexes     = $true   # $true = flag indexes that are exact or functional duplicates of another index on the same table.
+
+        # Unused indexes
+        CheckUnusedIndexes        = $true   # $true = flag indexes with zero seeks/scans/lookups since the last service restart.
+        UnusedIndexIgnoreUptime   = $false  # $true → bypass the 7-day uptime guard (stats are unreliable on recently restarted instances).
+
+        # Disabled indexes
+        CheckDisabledIndexes      = $true   # $true = flag indexes that have been explicitly disabled and are no longer maintained.
+
+        # Statistics staleness
+        CheckStatsStaleness       = $true   # $true = flag statistics objects not updated within StatsStaleDays.
+        StatsStaleDays            = 7       # Flag stats not updated in this many days.
+
+        # Wait statistics
+        CheckWaitStats            = $true   # $true = surface the top waits by cumulative wait time since the last service restart.
+        WaitStatsThreshold        = 100     # Minimum WaitSeconds for a wait type to be reported.
+        WaitStatsTopN             = 10      # Number of top waits to surface (by WaitSeconds).
+
+        # Last good CHECKDB
+        CheckLastGoodCheckDb      = $true   # $true = flag databases where DBCC CHECKDB has not completed successfully within CheckDbMaxDays.
+        CheckDbMaxDays            = 7       # Flag databases whose last good CHECKDB exceeds this.
+
+        # Identity column usage
+        IdentityUsageWarnPercent  = 80      # Attention when identity column capacity used % >= this.
+        IdentityUsageFailPercent  = 95      # Fail    when identity column capacity used % >= this.
+
+        # Error log retention configuration
+        CheckErrorLogConfig       = $true   # $true = flag instances retaining fewer SQL error log files than ErrorLogMinFiles.
+        ErrorLogMinFiles          = 52       # Warn if fewer log files are retained than this.
     }
 
 }
@@ -361,7 +488,7 @@ if ($DryRun) {
     
     # Report enabled packs
     $enabledPacks = $Settings.Keys | Where-Object { 
-        $_ -notin @('Suite', 'Logging', 'ConnectionTestTimeoutSeconds') -and 
+        $_ -notin @('Suite', 'Logging', 'ConnectionTestTimeoutSeconds','CheckTimeoutSeconds') -and 
         $Settings[$_].Enabled -eq $true 
     }
     

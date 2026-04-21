@@ -13,12 +13,12 @@
 #
 # WHAT DOES NOT BELONG HERE:
 #   - Actual check logic (belongs in Spoke.Database.ps1)
-#   - Instance-level helpers (belongs in Helpers.Base.ps1)
-#   - Generic utilities (e.g., string formatting -> Helpers.Base.ps1)
+#   - Instance-level helpers (belongs in Helpers.Shared.ps1)
+#   - Generic utilities (e.g., string formatting -> Helpers.Shared.ps1)
 #   - TempDB-specific logic (has dedicated spoke)
 #
 # DEPENDENCIES:
-#   - Helpers.Base.ps1 (Summarize-Examples, New-Finding, etc.)
+#   - Helpers.Shared.ps1 (Summarize-Examples, New-Finding, etc.)
 #   - dbatools module (Get-DbaDatabase, Get-DbaDbBackupHistory)
 #
 # CONTRACT REFERENCES:
@@ -140,8 +140,17 @@ function Get-StatusRank {
     .PARAMETER Status
         Status string ('pass', 'fail', 'attention', 'info').
     
+    .EXAMPLE
+        Get-StatusRank -Status 'fail'
+        # Returns: 2
+
+    .EXAMPLE
+        Get-StatusRank -Status 'pass'
+        # Returns: 0
+
     .NOTES
         Unrecognized status values default to rank 2 (fail) for safety.
+        Null input is treated as an empty string and also returns rank 2.
     #>
     [CmdletBinding()]
     param([string]$Status)
@@ -252,7 +261,7 @@ function ConvertTo-StringArray {
     
     .NOTES
         This is a database-agnostic helper that could potentially be moved
-        to Helpers.Base.ps1 if other spokes need it. Currently only used by
+        to Helpers.Shared.ps1 if other spokes need it. Currently only used by
         Spoke.Database.ps1.
     #>
     [CmdletBinding()]
@@ -474,6 +483,50 @@ function Get-DatabaseOwnerName {
 }
 
 function Get-DatabaseBackupDate {
+    <#
+    .SYNOPSIS
+        Safely extract a [datetime] value from either a plain DateTime or a
+        DbaDateTime wrapper object returned by Get-DbaDbBackupHistory.
+
+    .DESCRIPTION
+        dbatools returns backup timestamps as DbaDateTime objects, not plain
+        [datetime] values. This function unwraps either type reliably:
+
+          - Plain [datetime]    → returned as-is (do NOT call .Date; that
+                                  truncates to midnight)
+          - DbaDateTime wrapper → .Date property extracts the underlying
+                                  [datetime] (this .Date is the correct
+                                  unwrap accessor, not a truncation)
+          - Null input          → returns $null (never throws)
+          - Unknown type        → attempts [datetime] cast, returns $null on
+                                  failure
+
+    .PARAMETER DbaDateTimeObject
+        A DbaDateTime object from Get-DbaDbBackupHistory, a plain [datetime],
+        or $null.
+
+    .OUTPUTS
+        [datetime] or $null.
+
+    .EXAMPLE
+        $dt = Get-DatabaseBackupDate -DbaDateTimeObject $db.LastFullBackup
+        if ($null -eq $dt) { 'never' } else { $dt.ToString('s') }
+
+    .EXAMPLE
+        # Null-safe: no error when backup history is absent
+        $dt = Get-DatabaseBackupDate -DbaDateTimeObject $null
+        # $dt -> $null
+
+    .NOTES
+        Used by: ConvertTo-BackupAge (Helpers.Database.ps1)
+
+        The .Date asymmetry is intentional:
+          - On a plain [datetime], .Date truncates to midnight — WRONG for age math.
+          - On DbaDateTime, .Date is the property that exposes the inner [datetime]
+            — correct and required.
+
+        Never throws. Returns $null for any unresolvable input.
+    #>
     [CmdletBinding()]
     param([object]$DbaDateTimeObject)
 
@@ -612,7 +665,7 @@ function ConvertTo-BackupAge {
           - 'unknown' on parse errors
         
         Database-specific wrapper around backup date handling.
-        For general TimeSpan formatting, use Format-Duration from Helpers.Base.ps1.
+        For general TimeSpan formatting, use Format-Duration from Helpers.Shared.ps1.
         
         Used by: Spoke.Database.ps1 backup checks
     

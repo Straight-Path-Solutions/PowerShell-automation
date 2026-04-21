@@ -1,6 +1,6 @@
 ﻿#Requires -Version 5.1
 # =============================================================================
-# Helpers\Helper.Shared.ps1  -  Spoke-facing primitives for the SQL Health Suite
+# Helpers\Helpers.Shared.ps1  -  Spoke-facing primitives for the SQL Health Suite
 # =============================================================================
 #
 # WHAT BELONGS HERE:
@@ -8,7 +8,7 @@
 #   implement a contract defined in CONTRACTS.md (Contract B, C, E, G, H, I).
 #
 # WHAT DOES NOT BELONG HERE:
-#   Pack-specific logic  -> Common.<PackName>.ps1
+#   Pack-specific logic  -> Helpers.<PackName>.ps1
 #   Engine orchestration -> Checkup.Engine.ps1 (Write-InstancesJson, Measure-Findings, etc.)
 #
 # READ-ONLY POSTURE:
@@ -18,12 +18,12 @@
 # LOADING:
 #   Dot-source this file at the top of every spoke and helper.
 #   The engine calls Publish-HealthSuiteFunctions after dot-sourcing to promote
-#   all Common.*.ps1 functions into global scope for spoke runspaces.
+#   all Helpers.*.ps1 functions into global scope for spoke runspaces.
 #
 # REGION MAP:
 #   1.  Scoring constants          - category weights, priority multipliers
 #   2.  Sentinel types             - MissingConfigKey class
-#   3.  Status & scoring helpers   - Get-DefaultWeight, Test-Status, Status-FromPct, New-ThresholdStatus
+#   3.  Status & scoring helpers   - Get-DefaultWeight, New-ThresholdStatus
 #   4.  Finding factories          - New-Finding, New-Instance, New-InfoFinding, New-SkipFinding
 #   5.  Config helpers             - Cfg, Ensure-ConfigKeys, Import-CheckCategory, ConvertTo-Hashtable
 #   6.  Connection helpers         - Get-SqlConnectionSplat
@@ -937,7 +937,26 @@ function Initialize-TreeOutput {
 function Get-HostWidth {
     <#
     .SYNOPSIS
-        Get the console buffer width, with fallback for non-interactive hosts.
+        Return the current console buffer width, with a safe fallback for
+        non-interactive hosts (ISE, VS Code, CI pipelines).
+
+    .DESCRIPTION
+        Used by tree-output and inline-progress functions to pad lines to
+        the full console width. Returns 180 when the host does not expose
+        RawUI.BufferSize (e.g. ISE, redirected output).
+
+    .OUTPUTS
+        [int] Console width in characters.
+
+    .EXAMPLE
+        $width = Get-HostWidth
+        $line.PadRight([Math]::Max(20, $width - 1))
+
+    .NOTES
+        Used by: Write-TreeInlineEnd (line padding)
+
+        The fallback of 180 is wider than most consoles so lines are never
+        truncated; they may wrap, but content is always visible.
     #>
     [CmdletBinding()]
     param()
@@ -952,13 +971,34 @@ function Get-HostWidth {
 function Get-TreePrefix {
     <#
     .SYNOPSIS
-        Generate the tree-structure prefix for a given indentation level.
-    
+        Generate the indented pipe-and-branch prefix string for a given
+        tree output indentation level.
+
+    .DESCRIPTION
+        Produces the ASCII-art prefix used by Write-TreeLine and related
+        functions. Each level adds one '|  ' segment. The -Branch switch
+        replaces the continuation with a '|-- ' branch symbol.
+
+        Level 0  -> ''
+        Level 1  -> '|-- '  (branch) or '   '  (continuation)
+        Level 2  -> '|  |-- ' (branch) or '|     ' (continuation)
+
     .PARAMETER Level
-        Indentation level (0=root, 1=first child, etc.)
-    
+        Indentation level. 0 = root (no prefix). Negative values treated as 0.
+
     .PARAMETER Branch
-        If set, use branch symbol (|--) instead of continuation (|  )
+        If set, uses '|-- ' as the final segment instead of '   '.
+
+    .EXAMPLE
+        Get-TreePrefix -Level 1 -Branch
+        # Returns: '|-- '
+
+    .EXAMPLE
+        Get-TreePrefix -Level 2
+        # Returns: '|     '
+
+    .NOTES
+        Used by: Write-TreeLine, Write-TreeInlineStart, Write-TreeInlineEnd
     #>
     [CmdletBinding()]
     param(
@@ -974,6 +1014,86 @@ function Get-TreePrefix {
         return $pipes + '|-- '
     }
     return $pipes + '   '
+}
+
+function Write-TreeInlineStart {
+    <#
+    .SYNOPSIS
+        Write the start of an inline tree line without a trailing newline,
+        so the line can be overwritten by Write-TreeInlineEnd with final
+        status and timing.
+
+    .DESCRIPTION
+        Used for check output in tree mode: prints '[CHK] <text>' with no
+        newline. Write-TreeInlineEnd then overwrites the line with the
+        final result using a carriage return.
+
+        Should only be called when tree output mode is active.
+
+    .PARAMETER Level
+        Indentation level passed to Get-TreePrefix.
+
+    .PARAMETER Text
+        The check label text to display.
+
+    .EXAMPLE
+        Write-TreeInlineStart -Level 2 -Text 'Agent Running'
+        # ... run check ...
+        Write-TreeInlineEnd   -Level 2 -FinalText 'Agent Running  PASS  [0.12s]'
+
+    .NOTES
+        Used by: Invoke-Check (tree output path)
+
+        The caller is responsible for ensuring Write-TreeInlineEnd is always
+        called after Write-TreeInlineStart, even on error, to avoid leaving
+        a dangling no-newline line on the console.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$Level,
+        [Parameter(Mandatory)][string]$Text
+    )
+    
+    $prefix = Get-TreePrefix -Level $Level
+    Write-Host ("$prefix[CHK] $Text") -NoNewline
+}
+
+function Write-TreeInlineEnd {
+    <#
+    .SYNOPSIS
+        Overwrite the current console line (started by Write-TreeInlineStart)
+        with final status and timing text, then emit a newline.
+
+    .DESCRIPTION
+        Uses a carriage return (`r) to move to the beginning of the current
+        line and pads the final text to the full console width to erase any
+        leftover characters from the initial write.
+
+    .PARAMETER Level
+        Indentation level passed to Get-TreePrefix.
+
+    .PARAMETER FinalText
+        Complete final text for the line, including status and elapsed time.
+
+    .EXAMPLE
+        Write-TreeInlineEnd -Level 2 -FinalText 'Agent Running  PASS  [0.12s]'
+
+    .NOTES
+        Used by: Invoke-Check (tree output path)
+
+        Minimum pad width is 20 characters to handle very short console widths.
+        Uses Get-HostWidth for the full console width.
+    #>
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][int]$Level,
+        [Parameter(Mandatory)][string]$FinalText
+    )
+    
+    $prefix = Get-TreePrefix -Level $Level
+    $width = Get-HostWidth
+    $line = ("$prefix[CHK] $FinalText").PadRight([Math]::Max(20, $width - 1))
+    Write-Host ("`r$line")
 }
 
 function Write-TreeLine {
@@ -1007,44 +1127,6 @@ function Write-TreeLine {
     $prefix = Get-TreePrefix -Level $Level -Branch:$Branch
     $line = if ($Tag) { "$prefix[$Tag] $Text" } else { "$prefix$Text" }
     Write-Host $line
-}
-
-function Write-TreeInlineStart {
-    <#
-    .SYNOPSIS
-        Start an inline tree output (no newline).
-    
-    .DESCRIPTION
-        Used for checks that update in-place with timing info.
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][int]$Level,
-        [Parameter(Mandatory)][string]$Text
-    )
-    
-    $prefix = Get-TreePrefix -Level $Level
-    Write-Host ("$prefix[CHK] $Text") -NoNewline
-}
-
-function Write-TreeInlineEnd {
-    <#
-    .SYNOPSIS
-        Complete an inline tree output with final text.
-    
-    .DESCRIPTION
-        Overwrites the in-progress line with final status/timing.
-    #>
-    [CmdletBinding()]
-    param(
-        [Parameter(Mandatory)][int]$Level,
-        [Parameter(Mandatory)][string]$FinalText
-    )
-    
-    $prefix = Get-TreePrefix -Level $Level
-    $width = Get-HostWidth
-    $line = ("$prefix[CHK] $FinalText").PadRight([Math]::Max(20, $width - 1))
-    Write-Host ("`r$line")
 }
 
 function Write-TimingSummary {
@@ -1161,7 +1243,6 @@ function Extract-CheckResult {
     }
 }
 
-
 function Invoke-Check {
     <#
     .SYNOPSIS
@@ -1179,7 +1260,7 @@ function Invoke-Check {
         Error isolation contract:
           If -Run throws, Invoke-Check catches the error, emits a finding with:
             status   = 'fail'
-            label    = '<CatalogName>/<Key> - Check Error'
+            label    = '<SpokeFile> - Unhandled Error'
             details  = the exception message + script line if available
           and returns normally. The spoke continues to the next check.
 
@@ -1197,25 +1278,68 @@ function Invoke-Check {
         Third-level key (check identifier) in the catalog.
 
     .PARAMETER Target
-        Target object (Contract D). Passed to -Run as $t.
+        Target object (Contract D). Passed to -Run as the second argument.
 
     .PARAMETER Config
-        Full config hashtable. Passed to -Run as $cfg.
+        Full config hashtable. Passed to -Run as the third argument.
 
     .PARAMETER Findings
         [ref] to the spoke's findings collection. Invoke-Check appends to this.
 
     .PARAMETER Run
-        The check scriptblock. Must accept param($sql, $t, $cfg) and return a
-        hashtable with at minimum a 'Status' key. 'Details' is optional.
+        The check scriptblock. Receives ($sql, $Target, $Config) as positional
+        arguments. Must return a hashtable with at minimum a 'Status' key.
+        'Details' is optional but strongly recommended for non-pass results.
+
+    .EXAMPLE
+        # Minimal usage - catalog provides label/category/priority
+        Invoke-Check `
+            -SpokeFile   'Agent' `
+            -CatalogName 'Agent' `
+            -Function    'Get-DbaService' `
+            -Key         'AgentRunning' `
+            -Target      $Target `
+            -Config      $Config `
+            -Findings    $Findings `
+            -Run         {
+                param($sql, $t, $cfg)
+                $svc = Invoke-DBATools { Get-DbaService @sql -Type Agent -EnableException }
+                if ($null -eq $svc) {
+                    return @{ Status = 'attention'; Details = 'Could not retrieve agent service.' }
+                }
+                if ($svc.State -eq 'Running') {
+                    return @{ Status = 'pass'; Details = "SQL Agent is running." }
+                }
+                return @{ Status = 'fail'; Details = "SQL Agent is not running. State: $($svc.State)" }
+            }
+
+    .EXAMPLE
+        # Using Cfg for config-driven thresholds
+        Invoke-Check `
+            -SpokeFile   'Database' `
+            -CatalogName 'Database' `
+            -Function    'Get-DbaDatabase' `
+            -Key         'AutoShrink' `
+            -Target      $Target `
+            -Config      $Config `
+            -Findings    $Findings `
+            -Run         {
+                param($sql, $t, $cfg)
+                $bad = @($dbs | Where-Object { $_.AutoShrink })
+                if ($bad.Count -eq 0) { return @{ Status = 'pass'; Details = 'No databases have auto-shrink enabled.' } }
+                return @{ Status = 'fail'; Details = "Auto-shrink enabled on: $(($bad.Name) -join ', ')" }
+            }
 
     .NOTES
         Used by: All spokes (every individual check region)
 
-        The -Run scriptblock runs in the spoke's scope so it can see all spoke-
-        level variables ($dbs, $vlf, etc.) without being passed explicitly.
-        This is by design (Contract A).
+        The -Run scriptblock executes in the spoke's scope so it can reference
+        spoke-level variables ($dbs, $vlf, $sql, etc.) without passing them
+        explicitly. This is by design (Contract A).
+
+        Always pair with Register-CheckSection immediately before each call.
     #>
+    
     [CmdletBinding()]
     param(
         [Parameter(Mandatory)]
@@ -1289,13 +1413,13 @@ function Invoke-Check {
         Write-Host "    [CHECK ERR] $label$errorLine`: $errorMessage" -ForegroundColor DarkRed
 
         $Findings.Value += New-Finding `
-            -Label    "$spokeName - Unhandled Error" `
+            -Label    "$SpokeFile - Unhandled Error" `
             -Category 'Uncategorized' `
             -Priority 'High' `
             -Status   'fail' `
             -Details  "Spoke threw an unhandled exception$errorLine`: $errorMessage" `
-            -Source   $spokeName `
-            -SpokeFile $spokeName
+            -Source   $SpokeFile `
+            -SpokeFile $SpokeFile
 
         return   # <-- spoke continues to the next check
     }
@@ -1701,7 +1825,7 @@ function Get-SpCfgVal {
 function Publish-HealthSuiteFunctions {
     <#
     .SYNOPSIS
-        Promote all Common.*.ps1 functions into global scope.
+        Promote all Helpers.*.ps1 functions into global scope.
     
     .DESCRIPTION
         Called once by Core.Checkup.ps1 after dot-sourcing all helpers.
@@ -1725,7 +1849,7 @@ function Publish-HealthSuiteFunctions {
         Where-Object {
             $_.ScriptBlock -and
             $_.ScriptBlock.File -and
-            ($_.ScriptBlock.File -match '[\\/]+Helpers[\\/]+Common\..*\.ps1$')
+            ($_.ScriptBlock.File -match '[\\/]+Helpers[\\/]+Helpers\..*\.ps1$')
         } |
         Select-Object -ExpandProperty Name -Unique
 

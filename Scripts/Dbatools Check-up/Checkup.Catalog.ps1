@@ -183,5 +183,186 @@ $global:CheckCat_Database = @{
 }
 
 # ===========================================================================
+# HOST SPOKE
+# Operating system, hardware, OS-level privileges
+# ===========================================================================
+$global:CheckCat_Host = @{
+    'Test-DbaPowerPlan' = @{
+        # Power plan compliance
+        PowerPlan           = @{ Label = 'Power Plan Compliance';                   Category = 'Performance';   Priority = 'High';   Source = 'Test-DbaPowerPlan' }
+    }
+    
+    'Get-DbaComputerSystem' = @{
+        # Data prefetch marker
+        DataPrefetch        = @{ Label = 'Host - Data Prefetch';                    Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaComputerSystem' }
+        
+        # System state and configuration
+        PendingReboot       = @{ Label = 'Pending Reboot';                          Category = 'Reliability';   Priority = 'Medium'; Source = 'Get-DbaComputerSystem' }
+        VirtualMachine      = @{ Label = 'Virtual Machine Detection';               Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaComputerSystem' }
+        HyperthreadingRatio = @{ Label = 'HyperThreading Ratio';                    Category = 'Performance';   Priority = 'Low';    Source = 'Get-DbaComputerSystem' }
+        NUMANodes           = @{ Label = 'NUMA Topology';                           Category = 'Performance';   Priority = 'Low';    Source = 'Get-DbaComputerSystem' }
+    }
+    
+    'Get-CimInstance' = @{
+        # Domain membership
+        DomainMember        = @{ Label = 'Domain Membership';                       Category = 'Configuration'; Priority = 'Medium'; Source = 'Get-CimInstance' }
+    }
+    
+    'Get-DbaOperatingSystem' = @{
+        # OS version and inventory
+        OsVersionBuild      = @{ Label = 'OS Version / Build Compliance';           Category = 'Compliance';    Priority = 'Medium'; Source = 'Get-DbaOperatingSystem' }
+        OsInventory         = @{ Label = 'OS Inventory';                            Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaOperatingSystem' }
+    }
+    
+    'Get-DbaPrivilege' = @{
+        # Instant File Initialization - rollup + entries
+        InstantFileInit      = @{ Label = 'Instant File Initialization (IFI)';      Category = 'Performance';   Priority = 'Medium'; Source = 'Get-DbaPrivilege' }
+        InstantFileInitEntry = @{ Label = 'Instant File Initialization (IFI) - Entry'; Category = 'Performance'; Priority = 'Medium'; Source = 'Get-DbaPrivilege' }
+        
+        # Lock Pages In Memory
+        LockPagesInMemory    = @{ Label = 'Lock Pages In Memory (LPIM)';            Category = 'Performance';   Priority = 'Medium'; Source = 'Get-DbaPrivilege' }
+        
+        # Server privileges inventory - rollup + entries
+        ServerPrivileges     = @{ Label = 'OS Privilege Inventory';                 Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaPrivilege' }
+        ServerPrivilegesEntry = @{ Label = 'OS Privilege Inventory - Entry';        Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaPrivilege' }
+    }
+    
+    'Get-DbaFirewallRule' = @{
+        # Firewall rules inventory
+        FirewallRules       = @{ Label = 'SQL Firewall Rules Inventory (dbatools-managed)'; Category = 'Configuration'; Priority = 'Low'; Source = 'Get-DbaFirewallRule' }
+    }
+}
+
+# ===========================================================================
+# INSTANCE SPOKE
+# Instance-level configuration, build, sp_configure settings
+# ===========================================================================
+$global:CheckCat_Instance = @{
+    'Test-DbaBuild' = @{
+        # Data prefetch marker
+        DataPrefetch      = @{ Label = 'Instance - Data prefetch';                  Category = 'Configuration'; Priority = 'Low';    Source = 'Test-DbaBuild' }
+        
+        # Build and version compliance
+        BuildCompliance   = @{ Label = 'Build Compliance';                          Category = 'Compliance';    Priority = 'High';   Source = 'Test-DbaBuild' }
+        VersionSupport    = @{ Label = 'Version / Support Status';                  Category = 'Compliance';    Priority = 'High';   Source = 'Test-DbaBuild' }
+    }
+    
+    'Test-DbaMaxMemory' = @{
+        # Max server memory
+        MaxServerMemory   = @{ Label = 'Max Server Memory';                         Category = 'Performance';   Priority = 'High';   Source = 'Test-DbaMaxMemory' }
+    }
+    
+    'Test-DbaMaxDop' = @{
+        # Instance MAXDOP
+        InstanceMaxDop    = @{ Label = 'Max Degree of Parallelism (DOP)';           Category = 'Performance';   Priority = 'High';   Source = 'Test-DbaMaxDop' }
+    }
+    
+    'Test-DbaOptimizeForAdHoc' = @{
+        # Optimize for ad-hoc workloads
+        OptimizeForAdHoc  = @{ Label = 'Optimize for Ad-hoc Workloads';             Category = 'Performance';   Priority = 'Medium'; Source = 'Test-DbaOptimizeForAdHoc' }
+    }
+    
+    'Get-DbaSpConfigure' = @{
+        # Security-related sp_configure options
+        XpCmdShell        = @{ Label = 'xp_cmdshell (Disabled)';                    Category = 'Security';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        AdHocDistributed  = @{ Label = 'Ad Hoc Distributed Queries';                Category = 'Security';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        OleAutomation     = @{ Label = 'OLE Automation Procedures';                 Category = 'Security';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        ClrEnabled        = @{ Label = 'CLR Integration Enabled';                   Category = 'Security';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        ContainedDbAuth   = @{ Label = 'Contained Database Authentication';         Category = 'Security';      Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        
+        # Performance and reliability sp_configure options
+        RemoteDAC         = @{ Label = 'Remote DAC Enabled';                        Category = 'Reliability';   Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        CostThreshold     = @{ Label = 'Cost Threshold for Parallelism';            Category = 'Performance';   Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        MaxWorkerThreads  = @{ Label = 'Max Worker Threads';                        Category = 'Performance';   Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        NetworkPacketSize = @{ Label = 'Network Packet Size';                       Category = 'Performance';   Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        FillFactor        = @{ Label = 'Fill Factor Setting';                       Category = 'Performance';   Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        BackupCompression = @{ Label = 'Backup Compression Default';                Category = 'Recoverability'; Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        
+        # sp_configure inventory - rollup + entries
+        SpCfgInventory      = @{ Label = 'sp_configure Full Inventory';             Category = 'Configuration';      Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        SpCfgInventoryEntry = @{ Label = 'sp_configure Setting - Entry';            Category = 'Configuration';      Priority = 'Low';    Source = 'Get-DbaSpConfigure' }
+        
+        # Pending configuration changes - rollup + entries
+        SpCfgPending        = @{ Label = 'sp_configure Pending Changes';            Category = 'Configuration';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+        SpCfgPendingEntry   = @{ Label = 'sp_configure Pending - Entry';            Category = 'Configuration';      Priority = 'Medium'; Source = 'Get-DbaSpConfigure' }
+    }
+    
+    'Get-DbaFeature' = @{
+        # Feature discovery - rollup + entries
+        FeatureDiscovery      = @{ Label = 'SQL Feature Discovery';                 Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaFeature' }
+        FeatureDiscoveryEntry = @{ Label = 'SQL Feature Discovery - Entry';         Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaFeature' }
+    }
+    
+    'Get-DbaErrorLog' = @{
+        # Error log scan - rollup + entries
+        ErrorLogScan  = @{ Label = 'Error Log Scan';                                Category = 'Reliability';   Priority = 'High';   Source = 'Get-DbaErrorLog' }
+        ErrorLogEntry = @{ Label = 'Error Log Entry';                               Category = 'Reliability';   Priority = 'High';   Source = 'Get-DbaErrorLog' }
+    }
+    
+    'Get-DbaTraceFlag' = @{
+        # Active trace flags
+        TraceFlags        = @{ Label = 'Active Global Trace Flags';                 Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaTraceFlag' }
+    }
+    
+    'Get-DbaStartupParameter' = @{
+        # Startup parameters (requires WMI/PowerShell Remoting, not available on Linux)
+        StartupParams     = @{ Label = 'SQL Server Startup Parameters';             Category = 'Configuration'; Priority = 'Low';    Source = 'Get-DbaStartupParameter' }
+    }
+}
+
+# ===========================================================================
+# MAINTENANCE SPOKE
+# Index health, CHECKDB, wait stats, identity usage, error log config
+# ===========================================================================
+$global:CheckCat_Maintenance = @{
+    'Get-DbaDatabase' = @{
+        # Data prefetch marker
+        DataPrefetch      = @{ Label = 'Maintenance - Data prefetch (database list)'; Category = 'Maintenance'; Priority = 'Low'; Source = 'Get-DbaDatabase' }
+    }
+    
+    'Find-DbaDbDuplicateIndex' = @{
+        # Duplicate/overlapping indexes
+        DuplicateIndexes  = @{ Label = 'Duplicate / Overlapping Indexes';           Category = 'Maintenance';   Priority = 'Medium'; Source = 'Find-DbaDbDuplicateIndex' }
+    }
+    
+    'Find-DbaDbUnusedIndex' = @{
+        # Unused indexes
+        UnusedIndexes     = @{ Label = 'Unused Indexes';                            Category = 'Maintenance';   Priority = 'Low';    Source = 'Find-DbaDbUnusedIndex' }
+    }
+    
+    'Find-DbaDbDisabledIndex' = @{
+        # Disabled indexes
+        DisabledIndexes   = @{ Label = 'Disabled Indexes';                          Category = 'Maintenance';   Priority = 'Medium'; Source = 'Find-DbaDbDisabledIndex' }
+    }
+    
+    'Get-DbaWaitStatistic' = @{
+        # Wait statistics - rollup + entries
+        WaitStats         = @{ Label = 'Top Wait Statistics';                       Category = 'Performance';   Priority = 'Medium'; Source = 'Get-DbaWaitStatistic' }
+        WaitStatsEntry     = @{ Label = 'Wait Statistic Entry';                      Category = 'Performance';   Priority = 'Medium'; Source = 'Get-DbaWaitStatistic' }
+    }
+    
+    'Get-DbaDbStatistic' = @{
+        StatsStaleness = @{ Label = 'Statistics Staleness'; Category = 'Maintenance'; Priority = 'Medium'; Source = 'Get-DbaDbStatistic' }
+    }
+
+    'Get-DbaLastGoodCheckDb' = @{
+        # CHECKDB currency - rollup + entries
+        LastGoodCheckDb      = @{ Label = 'Last Good CHECKDB (Instance-wide)';      Category = 'Recoverability'; Priority = 'High';  Source = 'Get-DbaLastGoodCheckDb' }
+        LastGoodCheckDbEntry = @{ Label = 'Last Good CHECKDB - Database';           Category = 'Recoverability'; Priority = 'High';  Source = 'Get-DbaLastGoodCheckDb' }
+    }
+    
+    'Get-DbaErrorLogConfig' = @{
+        # Error log retention
+        ErrorLogConfig    = @{ Label = 'Error Log Retention Configuration';         Category = 'Maintenance';   Priority = 'Low';    Source = 'Get-DbaErrorLogConfig' }
+    }
+    
+    'Test-DbaIdentityUsage' = @{
+        # Identity column usage - rollup + entries
+        IdentityUsage     = @{ Label = 'Identity Column Usage';                     Category = 'Reliability';   Priority = 'Medium'; Source = 'Test-DbaIdentityUsage' }
+        IdentityUsageEntry = @{ Label = 'Identity Column Usage - Entry';            Category = 'Reliability';   Priority = 'Medium'; Source = 'Test-DbaIdentityUsage' }
+    }
+}
+
+# ===========================================================================
 # END OF CATALOG
 # ===========================================================================

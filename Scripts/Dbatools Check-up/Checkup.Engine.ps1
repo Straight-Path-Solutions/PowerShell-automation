@@ -109,7 +109,7 @@ $ErrorActionPreference = 'Stop'
 #  This constant is referenced in the HTML report builder to stamp the version
 #  that generated each report.  Update on every release.
 # =============================================================================
-$script:ENGINE_VERSION = '1.0.0'
+$script:ENGINE_VERSION = '1.1.0'
 
 # =============================================================================
 #  BOOTSTRAP
